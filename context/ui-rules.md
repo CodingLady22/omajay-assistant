@@ -12,7 +12,7 @@ Concise rules for building the Glam AI dashboard. The design at `context/designs
 
 ## Fonts
 
-Two fonts, imported in `web/index.html` head or via `@import` in `index.css`:
+Two fonts, imported in `client/index.html` head or via `@import` in `index.css`:
 
 ```
 Playfair Display (italic) — brand name + page titles only

@@ -6,9 +6,9 @@ Update this file after every completed feature. Any AI agent reading this should
 
 ## Current Status
 
-**Phase:** Not started
-**Last completed:** —
-**Next:** 01 Monorepo Scaffold
+**Phase:** 1 — Foundation
+**Last completed:** 01 Monorepo Scaffold
+**Next:** 02 MongoDB Connection + Collections
 
 ---
 
@@ -16,7 +16,7 @@ Update this file after every completed feature. Any AI agent reading this should
 
 ### Phase 1 — Foundation
 
-- [ ] 01 Monorepo Scaffold
+- [x] 01 Monorepo Scaffold
 - [ ] 02 MongoDB Connection + Collections
 - [ ] 03 LLM Client + Graph Skeleton
 - [ ] 04 Chat Route + Dashboard Shell
@@ -76,9 +76,15 @@ _Add decisions here as they are made during implementation._
 - Trends: both scheduled daily scan and on-demand.
 - Contract output: editable PDF.
 - Only autonomous action: morning WhatsApp briefing (asks plan-for-day + reminds unfinished projects). DM replies and calendar adds always require approval.
+- Frontend folder is `client/`, not `web/` as architecture.md originally said — all context docs corrected to match the actual scaffold.
+- Server `tsconfig.json` uses `"moduleResolution": "bundler"` (not `"nodenext"`) so `@/` imports stay extension-less, matching the import style shown in `code-standards.md`. TypeScript 6 still needs `baseUrl` alongside `paths` for alias resolution to work, with `"ignoreDeprecations": "6.0"` to silence the TS7 deprecation error.
 
 ---
 
 ## Notes
 
 _Add notes here as the build progresses — workarounds, patterns, anything that differs from the context files._
+
+- `server/lib/env.ts` requires every token in `code-standards.md`'s env table (plus `PORT`, default 3001) — there is no phased/optional mode. The server will not boot without a `.env` (gitignored) that has a value, even a placeholder, for each one. Verified: missing vars throw a loud, structured error listing exactly which keys are absent; a fully-populated `.env` boots the server and `GET /health` returns `{ success: true, data: { status: "ok" } }`.
+- Added `server/.gitignore` — none existed, so `server/node_modules` was previously unprotected from `git add`.
+- Installed for feature 01: `express`, `dotenv` (already present) + `zod` (added). The rest of the approved dependency list (`mongodb`, `@langchain/*`, `pdf-lib`, `node-cron`, `googleapis`) is intentionally not installed yet — each gets added when its feature is built, per `code-standards.md`'s "never install without a clear reason."

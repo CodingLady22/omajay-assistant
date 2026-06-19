@@ -110,7 +110,7 @@ Both surfaces hit the same REST endpoints. The same orchestrator runs regardless
 │   └── types/
 │       └── index.ts                   → Shared backend types
 │
-└── web/                               → React + Vite dashboard
+└── client/                               → React + Vite dashboard
     ├── index.html
     ├── src/
     │   ├── main.tsx
@@ -161,7 +161,7 @@ Both surfaces hit the same REST endpoints. The same orchestrator runs regardless
 | `server/jobs/`    | Scheduled triggers only. They call agents — they contain no agent logic.           |
 | `server/db/`      | MongoDB connection, typed collections, indexes. No business logic.                 |
 | `server/lib/`     | LLM client, env, logging, shared utils. Imported everywhere.                       |
-| `web/`            | UI only. No agent logic. Talks to the backend through `web/src/lib/api.ts`.        |
+| `client/`         | UI only. No agent logic. Talks to the backend through `client/src/lib/api.ts`.    |
 
 ---
 
@@ -448,7 +448,7 @@ The third-party connections (Instagram, WhatsApp, Google Calendar, YouTube) auth
 Rules the AI agent must never violate:
 
 - Routes contain no agent reasoning. Agents contain no HTTP handling.
-- `server/agents/` never imports from `server/routes/` or `web/`.
+- `server/agents/` never imports from `server/routes/` or `client/`.
 - All LLM calls go through `lib/llm.ts` — never import the Anthropic SDK directly in agent files.
 - The WhatsApp webhook always verifies Meta's signature before processing a message.
 - The DMs agent **never sends** a reply. It only drafts. Sending requires a separate, explicitly user-approved action.
