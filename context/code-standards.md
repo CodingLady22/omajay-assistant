@@ -20,7 +20,7 @@ Operate as a senior engineer:
 
 ## TypeScript
 
-- Strict mode on in `tsconfig.json` — no exceptions, across `server/` and `web/`.
+- Strict mode on in `tsconfig.json` — no exceptions, across `server/` and `client/`.
 - Never use `any` — use `unknown` and narrow.
 - Never use type assertions (`as X`) unless unavoidable, with a comment explaining why.
 - All function parameters and return types explicitly typed.
@@ -108,7 +108,7 @@ export async function trendsAgent(state: AgentState): Promise<Partial<AgentState
 - Each node is a pure function `(state) => Partial<state>`.
 - Each node has a try/catch and returns a safe fallback response on failure — never throws into the graph.
 - Errors logged to `agent_logs` before returning.
-- Nodes never import from `routes/` or `web/`.
+- Nodes never import from `routes/` or `client/`.
 - Nodes never call a provider SDK directly — only `lib/llm.ts`.
 - A node never performs an irreversible side effect (send DM, write calendar event) without an explicit approval flag in state.
 
@@ -235,14 +235,14 @@ export function DmItem({ threadId }: Props) {
 ```
 
 - No inline styles — Tailwind classes with project tokens only.
-- Client-side data fetching goes through `web/src/lib/api.ts` — never raw `fetch` scattered in components.
+- Client-side data fetching goes through `client/src/lib/api.ts` — never raw `fetch` scattered in components.
 - No browser storage APIs unless explicitly required.
 
 ---
 
 ## Import Aliases
 
-Use `@/` — never relative imports going up more than one level. Configure the alias in both `server/tsconfig.json` and `web/tsconfig.json` / Vite.
+Use `@/` — never relative imports going up more than one level. Configure the alias in both `server/tsconfig.json` and `client/tsconfig.json` / Vite.
 
 ```typescript
 // Correct

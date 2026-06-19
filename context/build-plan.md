@@ -25,9 +25,9 @@ Set up the project shell.
 
 **Logic:**
 
-- Monorepo with `/server` (Node + Express + TypeScript) and `/web` (React + Vite + TypeScript).
+- Monorepo with `/server` (Node + Express + TypeScript) and `/client` (React + Vite + TypeScript).
 - `tsconfig` strict in both; `@/` path alias in both.
-- Tailwind v4 in `/web` with the `@theme` tokens from `ui-tokens.md` in `web/src/index.css`.
+- Tailwind v4 in `/client` with the `@theme` tokens from `ui-tokens.md` in `client/src/index.css`.
 - `server/lib/env.ts` — zod-validated env loading for every variable in `code-standards.md`.
 - `.env.example` listing all variables.
 - `server/lib/logger.ts`, `server/lib/utils.ts`.
@@ -67,7 +67,7 @@ Set up the project shell.
 **Logic + UI:**
 
 - `POST /api/chat` — runs the graph with `channel: "web"`, returns `{ success, data: { response } }`.
-- `/web` shell: sidebar + topbar + panel switching, matching `context/designs/glam-ai.html`.
+- `/client` shell: sidebar + topbar + panel switching, matching `context/designs/glam-ai.html`.
 - Chat panel wired to `/api/chat` — send a message, see the stub reply.
 
 **Verify:** type in the dashboard chat, get a routed stub reply. The shell matches the design.

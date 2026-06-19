@@ -6,7 +6,7 @@ Design tokens for the Glam AI dashboard. Every colour, font, and radius comes fr
 
 ## How to Use
 
-This project uses **Tailwind CSS v4**. Tokens are defined with the `@theme` directive in `web/src/index.css`. No `tailwind.config.ts` is needed for colours or tokens — Tailwind v4 generates utility classes from the `@theme` variables automatically.
+This project uses **Tailwind CSS v4**. Tokens are defined with the `@theme` directive in `client/src/index.css`. No `tailwind.config.ts` is needed for colours or tokens — Tailwind v4 generates utility classes from the `@theme` variables automatically.
 
 ```tsx
 // Correct — generated utility class
@@ -151,7 +151,7 @@ Two fonts only:
 | Nav item            | DM Sans  | 13px | 400/500| 500 when active             |
 | Label / muted       | DM Sans  | 10-11px | 400 | uppercase 0.1em for section labels |
 
-Import both via Google Fonts in `web/index.html` or `@import` in `index.css`. Never fall back to a system font as the primary.
+Import both via Google Fonts in `client/index.html` or `@import` in `index.css`. Never fall back to a system font as the primary.
 
 ---
 

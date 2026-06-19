@@ -26,7 +26,7 @@ _Empty. Components will be added here as they are built._
 Entry template:
 
 ### ComponentName
-- **Path:** web/src/components/.../ComponentName.tsx
+- **Path:** client/src/components/.../ComponentName.tsx
 - **Used in:** which pages
 - **Key classes:** bg-surface border-border rounded-[14px] ...
 - **Notes:** anything non-obvious
