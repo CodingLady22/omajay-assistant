@@ -4,6 +4,8 @@
   "main": "index.ts",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "db:seed": "tsx src/db/run-seed.ts",
+    "db:setup-search-index": "tsx src/db/run-setup-search-index.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -14,6 +16,7 @@
   "dependencies": {
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "mongodb": "^7.3.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

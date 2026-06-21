@@ -1,48 +1,53 @@
-# Memory — Feature 01: Monorepo Scaffold (Tailwind v4 + server foundation)
+# Memory — Feature 02: MongoDB Connection + Collections (+ LLM provider decision)
 
-Last updated: 2026-06-19
+Last updated: 2026-06-21
 
 ## What was built
 
-- **Tailwind v4 in `client/`**: installed `tailwindcss` + `@tailwindcss/vite`, added the plugin to `client/vite.config.ts`, added Google Fonts (DM Sans, Playfair Display italic) to `client/index.html`, replaced `client/src/index.css` with the full `@theme` token block from `context/ui-tokens.md` plus a base `body` rule.
-- **Deleted root `index.html`** — it was a duplicate/earlier draft of `context/designs/glam-ai.html` (same markup, placeholder name "Oma Jay" instead of "Sofia Caruso"), had no functional role, fully redundant with the design reference.
-- **Renamed every `web/` folder reference to `client/`** across `AGENTS.md`, `context/architecture.md`, `context/build-plan.md`, `context/code-standards.md`, `context/ui-rules.md`, `context/ui-registry.md`, `context/ui-tokens.md`. Left generic prose ("web dashboard") and the `channel: "web"` enum value untouched.
-- **Server foundation (feature 01 server half)**:
-  - `server/.gitignore` (none existed — `server/node_modules` was unprotected)
-  - `server/src/lib/utils.ts` — `nowISO()`
-  - `server/src/lib/logger.ts` — structured `info`/`warn`/`error`, context-prefixed
-  - `server/src/lib/env.ts` — zod-validated env loading for every var in `code-standards.md` plus `PORT` (default 3001); throws a loud structured error listing exactly which vars are missing
-  - `server/.env.example`
-  - `server/src/index.ts` — real Express app, `GET /health` → `{ success, data: { status } }`, listens on `env.PORT`
-  - `server/tsconfig.json` — added `@/` alias (`baseUrl` + `paths`), switched `module`/`moduleResolution` from `nodenext` to `esnext`/`bundler`, removed stray `"jsx": "react-jsx"`, added `"ignoreDeprecations": "6.0"`
-  - Installed `zod` (kept `mongodb`, `@langchain/*`, `pdf-lib`, `node-cron`, `googleapis` uninstalled — deferred to the features that need them)
-- **`client/tsconfig.app.json`** — added `@/` alias, explicit `"strict": true`
-- **`client/vite.config.ts`** — added `resolve.alias` for `@` → `./src`
-- **`context/progress-tracker.md`** — feature 01 checked off, phase/last-completed/next updated, decisions + notes recorded
+- **Feature 02, fully built and reviewed:**
+  - `server/src/types/index.ts` — typed document shapes for all 10 collections in `architecture.md` (`Profile`, `Trend`, `ScriptDoc`, `Dm`, `EventDoc`, `DocumentChunk`, `ContractDoc`, `Briefing`, `AgentRun`, `AgentLog`). `_id` is optional on every type (required to satisfy the driver's `OptionalUnlessRequiredId` insert typing).
+  - `server/src/db/client.ts` — connection singleton. `connectToDatabase()` retries up to 5 times (~2s apart, each attempt logged, failed clients closed before retrying) then throws. `getDb()` throws if called before connecting. `closeDatabaseConnection()` for shutdown.
+  - `server/src/db/collections.ts` — typed accessor per collection.
+  - `server/src/db/indexes.ts` — `createStandardIndexes()` (unique `trends.external_id`, unique `dms.ig_thread_id`, `events.start`, compound `contracts.{brand,status}`) runs on every boot. `createVectorSearchIndex()` is kept OUT of the boot path, existence-checked via `listSearchIndexes`, auto-creates the `documents` collection first if missing. `EMBEDDING_DIMENSIONS` (currently `1024`) is a named, exported, commented-as-provisional constant — update it when feature 18 picks the real embedding model.
+  - `server/src/db/seed.ts` + `run-seed.ts` — idempotent seed of one `profile` doc for Sofia Caruso.
+  - `server/src/db/run-setup-search-index.ts` — CLI entrypoint for the vector index script.
+  - `server/src/index.ts` — boot sequence is connect → standard indexes → `app.listen`; added `SIGINT`/`SIGTERM` handlers that close the DB connection before exiting.
+  - `server/src/lib/env.ts` — restructured from one all-or-nothing eager schema into eager **core** (`PORT`, `MONGODB_URI`) + lazy per-service getters (`getLlmEnv`, `getWhatsAppEnv`, `getInstagramEnv`, `getYouTubeEnv`, `getGoogleCalendarEnv`, `getEmbeddingEnv`), each validated and memoized on first call.
+  - `server/src/lib/utils.ts` — added `sleep(ms)`.
+  - `server/package.json` — added `mongodb` dependency; added `db:seed` and `db:setup-search-index` scripts.
+  - `server/.env.example` — `ANTHROPIC_API_KEY` → `GEMINI_API_KEY`.
+
+- **LLM provider switched to Gemini** (client confirmed: free tier for dev/test; Anthropic + OpenAI to be added as production fallback later, preference TBD). Updated `AGENTS.md`, `context/architecture.md`, `context/code-standards.md`, `context/library-docs.md`, `context/build-plan.md`, `context/progress-tracker.md` to say Gemini/`@langchain/google-genai`/`GEMINI_API_KEY` everywhere instead of Claude/Anthropic, including a forward note in each to use LangChain's `.withFallbacks()` when Anthropic/OpenAI are added. **`server/src/lib/llm.ts` itself does NOT exist yet** — that's feature 03.
+
+- **`AGENTS.md` corrected**: the five skills (`architect`, `remember`, `review`, `imprint`, `recover`) are plain files at `.agents/skills/<name>/SKILL.md` in this harness, not registered slash commands — AGENTS.md previously described them as `/architect` etc., which doesn't work here.
 
 ## Decisions made
 
-- Frontend folder is `client/`, not `web/` (architecture.md had the wrong name) — corrected everywhere.
-- Defer bulk-installing the rest of the approved server dependencies until each one's feature is actually built (`code-standards.md`: "never install without a clear reason"). Only `express`, `dotenv`, `zod` installed so far.
-- `server/lib/env.ts` requires every token unconditionally, no phased mode — local dev needs a `.env` with a placeholder value for every key even before those integrations exist. This is intentional (the point is to fail loudly on anything missing), not a bug.
-- Server tsconfig uses `"moduleResolution": "bundler"` (not `"nodenext"`) so `@/` imports stay extension-less, matching the import style documented in `code-standards.md`.
+- DB connection: connect once at startup, fail-fast, bounded retry (5×, ~2s apart, logged) on the initial connect only — no retry afterward, the driver's own pool handles reconnection.
+- Index strategy split: standard indexes are cheap/idempotent and run on every boot; the vector search index is deliberately excluded from boot (Atlas's `createSearchIndex` builds asynchronously and shouldn't gate "boot done" for a feature, contracts/#20, that isn't built yet) — it's a separate, existence-checked script instead.
+- GridFS is explicitly out of scope for feature 02 — deferred to feature 20, per "build only what the feature needs."
+- `env.ts`: a feature's credentials should only be required once that feature is actually built, not all up front — hence core vs. lazy-per-service validation.
+- LLM: Gemini now, Anthropic + OpenAI as fallback (not replacement) before production, client preference undecided — `lib/llm.ts` must stay the only file that knows which provider is active; no agent file may import a provider SDK directly.
 
 ## Problems solved
 
-- TS6 hard-errors on standalone `baseUrl` (TS5101) unless `"ignoreDeprecations": "6.0"` is set — but `baseUrl` is still functionally required alongside `paths` for alias resolution at this TS version; both must stay together.
-- `"module": "nodenext"` forced `.js` extensions on every import (including aliased ones) because `package.json` has `"type": "module"` — broke extension-less `@/lib/env` imports. Fixed by switching to `module: "esnext"` + `moduleResolution: "bundler"`.
-- TS path-mapping and Vite's bundler resolution are independent — `tsconfig.app.json` paths alone don't make Vite resolve `@/`; needed `resolve.alias` in `vite.config.ts` too. Verified with a throwaway aliased import wired into `main.tsx` (module count went 16 → 18 in the Vite build), then removed.
+- MongoDB driver's `OptionalUnlessRequiredId<TSchema>` only relaxes `_id` to optional-on-insert if the schema itself declares `_id?: ObjectId` — declaring it required broke `insertOne` typing. Fixed by making `_id` optional on every document type.
+- `createVectorSearchIndex()` failed with `NamespaceNotFound` because the `documents` collection doesn't exist until feature 18 ingests something — fixed by creating the collection first if missing.
+- `env.ts`'s old all-or-nothing eager validation blocked verifying feature 02 in isolation (every third-party key had to exist just to boot) — restructuring into core+lazy also surfaced and resolved the stale `ANTHROPIC_API_KEY`-vs-`GEMINI_API_KEY` naming conflict in the docs.
+- Windows/Git Bash can't reliably deliver a real `SIGINT` cross-process (`process.kill(pid, 'SIGINT')` on Windows generally does a hard `TerminateProcess` instead) — couldn't directly verify the new graceful-shutdown handler end-to-end in this sandbox. The code is the standard Node.js idiom and `closeDatabaseConnection()` itself is already proven (used successfully by `run-seed.ts`/`run-setup-search-index.ts`); this is a tooling limitation, not a known defect.
+- `npx tsc` can resolve to a bogus stub package instead of the local TypeScript install depending on cwd — use `./node_modules/.bin/tsc` directly from `server/` instead.
 
 ## Current state
 
-- Feature 01 (Monorepo Scaffold) is fully done and verified: server boots; env validation fails loudly on missing vars and succeeds with placeholders (`GET /health` → `{"success":true,"data":{"status":"ok"}}`); client dev server responds 200; both tsconfigs strict with working `@/` aliases; Tailwind v4 live in `client/`.
-- `client/src/App.tsx` / `App.css` have pre-existing uncommitted changes (App.tsx stripped to an empty stub, App.css deleted) that predate this session — not touched, left as-is as likely in-progress work.
-- Nothing committed yet — all changes are sitting in the working tree. `server/` is still entirely untracked.
+- Features 01 and 02 are both complete and ticked off in `context/progress-tracker.md`. Feature 02 went through the `review` skill (2 minor issues found — no client cleanup on retry, no graceful shutdown — both fixed and re-verified).
+- Everything was verified against the real configured Atlas cluster, not mocked: connect+retry, standard indexes (idempotent across repeat boots), vector-index setup script (idempotent across repeat runs), seed script (idempotent across repeat runs), full server boot + `GET /health`.
+- The LLM provider decision (Gemini now, Anthropic/OpenAI fallback later) is settled and propagated across every context doc, but no LLM code exists yet.
+- Nothing is committed to git this session — `git status` shows everything as unstaged modifications/untracked (`AGENTS.md`, all touched `context/*.md`, `server/.env.example`, `server/package.json`/`package-lock.json`, `server/src/index.ts`, `server/src/lib/env.ts`, `server/src/lib/utils.ts` modified; `server/src/db/`, `server/src/types/` untracked).
 
 ## Next session starts with
 
-Feature 02 — MongoDB Connection + Collections: `server/db/client.ts` (connection singleton), `server/db/collections.ts` (typed accessors for every collection in `architecture.md`), `server/db/indexes.ts` (standard indexes + the Atlas Vector Search index on `documents.embedding`), seed a single `profile` document. Will need to install `mongodb` at that point. Run `/architect` first per the project's engineering loop.
+Feature 03 — LLM Client + Graph Skeleton: `server/lib/llm.ts` (Gemini via `@langchain/google-genai`, one provider-agnostic export — install the package first, it isn't in yet), `server/agents/state.ts` (`AgentState`), `server/agents/graph.ts` (orchestrator + placeholder nodes returning stub responses), `server/agents/orchestrator.ts` (intent classification into the fixed set, defaults to `smalltalk`). Read `.agents/skills/architect/SKILL.md` and run that process manually first, per the engineering loop — it is not a slash command in this harness.
 
 ## Open questions
 
-- Nothing blocking. Worth checking with the user whether to commit the feature 01 work as a checkpoint before starting feature 02 — nothing is committed yet.
+- Nothing blocking feature 03. Worth checking with the user whether to commit features 01+02 as a checkpoint before starting feature 03 — nothing has been committed yet across either session.

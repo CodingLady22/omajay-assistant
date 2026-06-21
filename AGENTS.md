@@ -36,34 +36,38 @@ Full detail is in `context/`. Read these before building:
 
 Skills for this project come from: https://github.com/JavaScript-Mastery-Pro/skills
 
+They live locally at `.agents/skills/<name>/SKILL.md` (e.g. `.agents/skills/architect/SKILL.md`). They are **not** registered as slash commands in this harness — there is no `/architect`, `/remember`, `/review`, `/imprint`, or `/recover` to invoke. To use one, read its `SKILL.md` and follow it directly.
+
 These five skills are a workflow, not just reference docs. Use them at the right moments:
 
 | Skill | When to use | What it does |
 | ----- | ----------- | ------------ |
-| `/architect` | **Before building anything** | Think through the feature like a senior engineer first. Surfaces decisions, aligns on approach, produces an implementation plan to confirm before code is written. Collaborative, not a grilling. |
-| `/remember save` | **End of every session** | Compresses what matters into `memory.md` so the next session isn't blank. |
-| `/remember restore` | **Start of every session** | Restores full context from `memory.md` and confirms before continuing. |
-| `/review` | **After building any feature** | Verifies the build is *correct*, not just working — checks plan alignment, system integrity, production readiness. Reports issues for the developer to decide on. |
-| `/imprint` | **After building any UI component** | Extracts the component's visual patterns into `context/ui-registry.md` so later components match. `/imprint audit` scans the whole codebase to establish a baseline. |
-| `/recover` | **When something breaks** | Diagnoses the failure type first — targeted fix, hard reset, or rethink — before responding. |
+| Skill (file) | When to use | What it does |
+| ----- | ----------- | ------------ |
+| `architect` (`.agents/skills/architect/SKILL.md`) | **Before building anything** | Think through the feature like a senior engineer first. Surfaces decisions, aligns on approach, produces an implementation plan to confirm before code is written. Collaborative, not a grilling. |
+| `remember` (`.agents/skills/remember/SKILL.md`) — save | **End of every session** | Compresses what matters into `memory.md` so the next session isn't blank. |
+| `remember` (`.agents/skills/remember/SKILL.md`) — restore | **Start of every session** | Restores full context from `memory.md` and confirms before continuing. |
+| `review` (`.agents/skills/review/SKILL.md`) | **After building any feature** | Verifies the build is *correct*, not just working — checks plan alignment, system integrity, production readiness. Reports issues for the developer to decide on. |
+| `imprint` (`.agents/skills/imprint/SKILL.md`) | **After building any UI component** | Extracts the component's visual patterns into `context/ui-registry.md` so later components match. `imprint audit` scans the whole codebase to establish a baseline. |
+| `recover` (`.agents/skills/recover/SKILL.md`) | **When something breaks** | Diagnoses the failure type first — targeted fix, hard reset, or rethink — before responding. |
 
 The loop:
 
 ```
-/architect  →  Build  →  /review  →  Ship
+architect  →  Build  →  review  →  Ship
                  ↓
-/imprint   (after every UI component)
-/remember  (start and end of every session)
-/recover   (when something breaks)
+imprint   (after every UI component)
+remember  (start and end of every session)
+recover   (when something breaks)
 ```
 
 How this maps to this project:
 
-- **`/architect` before each feature** in `build-plan.md` — confirm the plan before writing code.
-- **`/imprint` after each dashboard panel/component** — it maintains `context/ui-registry.md` for you. Don't fill that file by hand.
-- **`/remember save` / `restore` around every session** — keeps continuity across the 23 features. Reads and writes `memory.md` at the project root.
-- **`/review` after each feature** — before ticking it off in `progress-tracker.md`.
-- **`/recover` when stuck** — instead of patching blindly.
+- **`architect` before each feature** in `build-plan.md` — confirm the plan before writing code.
+- **`imprint` after each dashboard panel/component** — it maintains `context/ui-registry.md` for you. Don't fill that file by hand.
+- **`remember` save / restore around every session** — keeps continuity across the 23 features. Reads and writes `memory.md` at the project root.
+- **`review` after each feature** — before ticking it off in `progress-tracker.md`.
+- **`recover` when stuck** — instead of patching blindly.
 
 Order of authority for library usage:
 
@@ -96,4 +100,4 @@ If any of these MCP connectors are configured, prefer them over manual API calls
 
 ## Stack At A Glance
 
-React + Vite + Tailwind v4 (client) · Node + Express + TypeScript (server) · LangGraph.js + LangChain.js · Claude via `@langchain/anthropic` · MongoDB (data + GridFS + Atlas Vector Search) · WhatsApp Cloud API · Instagram Graph API · YouTube Data API · Google Calendar API · pdf-lib · node-cron. TypeScript everywhere, strict. REST API.
+React + Vite + Tailwind v4 (client) · Node + Express + TypeScript (server) · LangGraph.js + LangChain.js · Gemini via `@langchain/google-genai` (primary for now — free tier for dev/test; Anthropic + OpenAI planned as production fallback providers, client preference TBD) · MongoDB (data + GridFS + Atlas Vector Search) · WhatsApp Cloud API · Instagram Graph API · YouTube Data API · Google Calendar API · pdf-lib · node-cron. TypeScript everywhere, strict. REST API.

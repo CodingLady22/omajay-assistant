@@ -8,7 +8,7 @@
 | Styling           | Tailwind CSS v4                       | UI styling via `@theme` tokens                     |
 | Backend           | Node.js + Express + TypeScript        | REST API server                                    |
 | Agent framework   | LangGraph.js + LangChain.js           | Multi-agent orchestration                          |
-| LLM               | Claude (Anthropic) via `@langchain/anthropic` | Routing, scripts, summaries, contract drafting |
+| LLM               | Gemini via `@langchain/google-genai`  | Routing, scripts, summaries, contract drafting     |
 | Database          | MongoDB                               | All data — documents, state, cache                 |
 | Vector search     | MongoDB Atlas Vector Search           | RAG over rate cards + old contracts                |
 | Messaging         | WhatsApp Cloud API (Meta)             | Primary interface — send + receive                 |
@@ -19,7 +19,7 @@
 | Scheduling        | node-cron                             | Daily trends scan + morning briefing               |
 | Validation        | zod                                   | Schema validation everywhere                       |
 
-> **Model note:** This project uses Claude, not GPT-4o. The model string and provider are set once in `lib/llm.ts` and imported everywhere. Never call a provider SDK directly from agent code.
+> **Model note:** This project uses Gemini for now (`@langchain/google-genai`) — it has a free tier suited to development and testing. Before production, Anthropic and OpenAI will be added as fallback providers so the assistant survives a single provider outage; which provider(s) the client ultimately prefers isn't decided yet. Because the provider is expected to change and multiply, `lib/llm.ts` must expose one provider-agnostic client that every agent imports — no agent file may import a provider SDK directly or hardcode a model string, so adding or swapping providers later never touches agent code.
 
 ---
 
@@ -102,7 +102,7 @@ Both surfaces hit the same REST endpoints. The same orchestrator runs regardless
 │   │   └── indexes.ts                 → Index setup incl. vector index
 │   │
 │   ├── lib/
-│   │   ├── llm.ts                     → Claude client — single source of model config
+│   │   ├── llm.ts                     → LLM client (Gemini for now) — single source of model config
 │   │   ├── logger.ts                  → Structured logging
 │   │   ├── env.ts                     → zod-validated env loading
 │   │   └── utils.ts                   → Shared helpers + constants
@@ -204,7 +204,7 @@ node-cron fires daily-trends job
         ↓
 trends-agent scans Instagram Graph + YouTube Data
         ↓
-Claude scores each item for makeup-niche relevance
+The LLM scores each item for makeup-niche relevance
         ↓
 Top results upserted into `trends` collection
 ```
@@ -217,7 +217,7 @@ node-cron fires morning-briefing job
 briefing-agent gathers: today's events, unfinished drafts,
 unsent contracts, unreplied brand DMs
         ↓
-Claude composes a short briefing that asks the plan for the day
+The LLM composes a short briefing that asks the plan for the day
         ↓
 services/whatsapp.ts sends it to Sofia
 ```
@@ -230,7 +230,7 @@ Sofia: "draft a contract for the Velour summer deal"
 contracts-agent retrieves her relevant rate card lines + past
 contract clauses from MongoDB Atlas Vector Search
         ↓
-Claude drafts the contract grounded ONLY in retrieved material
+The LLM drafts the contract grounded ONLY in retrieved material
         ↓
 pdf-lib renders an editable PDF
         ↓
@@ -256,7 +256,7 @@ The graph is a router-and-specialists pattern. One orchestrator classifies inten
                             response text
 ```
 
-- **orchestrator** — single Claude call returns one intent label from a fixed set. Falls back to `content` (general chat) if unsure.
+- **orchestrator** — single LLM call returns one intent label from a fixed set. Falls back to `content` (general chat) if unsure.
 - **trends** — reads stored trends; can trigger a live scan.
 - **content** — generates scripts/captions/hashtags.
 - **calendar** — reads events; for adds, returns a *proposal* (does not write).
@@ -307,7 +307,7 @@ Trending content from the scheduled scan.
 | thumbnail    | string   | Optional                                |
 | metric       | string   | e.g. "2.4M views"                       |
 | metric_value | number   | Numeric for sorting                     |
-| relevance    | number   | 0-100, Claude-scored to her niche       |
+| relevance    | number   | 0-100, LLM-scored to her niche          |
 | summary      | string   | Why it's relevant / content angle       |
 | scanned_at   | Date     |                                         |
 
@@ -338,7 +338,7 @@ Cached Instagram DMs + classification.
 | sender_handle  | string   |                                                |
 | last_message   | string   |                                                |
 | classification | string   | "brand_inquiry" \| "active_collab" \| "ignore" |
-| summary        | string   | Claude summary                                 |
+| summary        | string   | LLM summary                                    |
 | draft_reply    | string   | Suggested reply — NOT sent                     |
 | unread         | boolean  |                                                |
 | fetched_at     | Date     |                                                |
@@ -388,6 +388,8 @@ Drafted contracts.
 | status      | string   | "draft" \| "sent"                      |
 | created_at  | Date     |                                        |
 
+Index: compound `{ brand: 1, status: 1 }` (non-unique) — supports per-brand draft lookups.
+
 ### `briefings`
 
 Morning briefing log.
@@ -430,8 +432,10 @@ Retrieve (per contract request):
         ↓
   MongoDB Atlas $vectorSearch top-k chunks
         ↓
-  pass retrieved chunks to Claude as the ONLY source of rates/terms
+  pass retrieved chunks to the LLM as the ONLY source of rates/terms
 ```
+
+**Note:** This project requires an Atlas-tier MongoDB cluster, since `$vectorSearch` is an Atlas-only feature — the configured `MONGODB_URI` points at such a cluster.
 
 ---
 
@@ -449,7 +453,7 @@ Rules the AI agent must never violate:
 
 - Routes contain no agent reasoning. Agents contain no HTTP handling.
 - `server/agents/` never imports from `server/routes/` or `client/`.
-- All LLM calls go through `lib/llm.ts` — never import the Anthropic SDK directly in agent files.
+- All LLM calls go through `lib/llm.ts` — never import a provider SDK (Gemini's, or later Anthropic's/OpenAI's) directly in agent files.
 - The WhatsApp webhook always verifies Meta's signature before processing a message.
 - The DMs agent **never sends** a reply. It only drafts. Sending requires a separate, explicitly user-approved action.
 - The calendar agent **never writes** an event directly. `calendar_add` produces a `proposed` event; only an explicit approval writes to Google Calendar.

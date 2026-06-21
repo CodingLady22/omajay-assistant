@@ -53,7 +53,7 @@ Set up the project shell.
 
 **Logic:**
 
-- `server/lib/llm.ts` — the one Claude client.
+- `server/lib/llm.ts` — the one LLM client (Gemini for now).
 - `server/agents/state.ts` — `AgentState`.
 - `server/agents/graph.ts` — graph with orchestrator + placeholder nodes that each return a stub response.
 - `server/agents/orchestrator.ts` — classifies intent into the fixed set, defaults to `smalltalk`.
@@ -118,7 +118,7 @@ Set up the project shell.
 
 **Logic:**
 
-- `server/agents/trends-agent.ts` — pulls from the services, Claude scores each item 0-100 for niche relevance, upserts top results into `trends` (dedupe on `external_id`).
+- `server/agents/trends-agent.ts` — pulls from the services, the LLM scores each item 0-100 for niche relevance, upserts top results into `trends` (dedupe on `external_id`).
 - On-demand: returns freshest stored trends; triggers a live scan if stored data is stale.
 - `GET /api/trends` — returns stored trends for the dashboard.
 - Wire the dashboard grid to real data.
@@ -155,7 +155,7 @@ Set up the project shell.
 
 **Logic:**
 
-- `server/agents/content-agent.ts` — given a trend/topic/vibe, Claude (temp 0.7) returns a structured Reel script (hook/body/cta), caption variations, hashtags.
+- `server/agents/content-agent.ts` — given a trend/topic/vibe, the LLM (temp 0.7) returns a structured Reel script (hook/body/cta), caption variations, hashtags.
 - Save to `scripts`; `GET/POST /api/scripts`.
 - Wire the dashboard library to real data.
 
@@ -269,7 +269,7 @@ Set up the project shell.
 **Logic:**
 
 - `server/rag/retrieve.ts` — vector search top-k chunks for the deal.
-- `server/agents/contracts-agent.ts` — Claude drafts the contract grounded ONLY in retrieved chunks (never invents rates/terms; if retrieval is empty, says so).
+- `server/agents/contracts-agent.ts` — the LLM drafts the contract grounded ONLY in retrieved chunks (never invents rates/terms; if retrieval is empty, says so).
 - `server/services/pdf.ts` — render an editable PDF with pdf-lib; store in GridFS; save to `contracts`.
 - `POST /api/contracts/draft`, `GET /api/contracts`, `GET /api/contracts/:id/pdf`.
 - Deliver the PDF to WhatsApp as a document; show in the dashboard.
@@ -284,7 +284,7 @@ Set up the project shell.
 
 **Logic:**
 
-- `server/agents/briefing-agent.ts` — gathers today's events, unfinished script drafts, unsent contracts, and unreplied brand DMs; Claude composes a short briefing that asks the plan for the day and reminds about unfinished projects.
+- `server/agents/briefing-agent.ts` — gathers today's events, unfinished script drafts, unsent contracts, and unreplied brand DMs; the LLM composes a short briefing that asks the plan for the day and reminds about unfinished projects.
 - `server/jobs/morning-briefing.ts` — runs the agent and sends via WhatsApp at `profile.briefing_time`.
 - Register in `scheduler.ts`.
 - Log each briefing (and her reply, captured by the normal webhook) to `briefings`.
