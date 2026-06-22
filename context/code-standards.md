@@ -36,7 +36,7 @@ Operate as a senior engineer:
 - Route files in `server/routes/` — parse request, call one agent node or service, return the response wrapper. No reasoning in routes.
 - Agent logic in `server/agents/` only. Never in routes, never in services.
 - Third-party API calls in `server/services/` only. Services don't reason and don't make LLM calls.
-- All LLM calls go through `server/lib/llm.ts`. Never import `@langchain/anthropic` or the Anthropic SDK anywhere else.
+- All LLM calls go through `server/lib/llm.ts`. Never import a provider SDK (`@langchain/google-genai` now; `@langchain/anthropic` / `@langchain/openai` later) anywhere else.
 - All MongoDB access through typed accessors in `server/db/collections.ts`. Never reach into a raw collection from a route or agent.
 - Always read library docs / skills before using a third-party API — versions drift from training data. See `library-docs.md`.
 
@@ -139,24 +139,25 @@ export async function fetchTrendingMakeupVideos(): Promise<YouTubeTrend[]> {
 
 ## LLM Usage
 
-All Claude calls go through one place:
+All LLM calls go through one place. Provider is Gemini for now — free tier, good for development and testing. Before production, Anthropic and OpenAI get added as fallback providers (the client hasn't decided which they'll prefer), so `lib/llm.ts` must keep the provider swappable without any agent file knowing which one is active:
 
 ```typescript
 // server/lib/llm.ts
-import { ChatAnthropic } from "@langchain/anthropic";
-import { env } from "@/lib/env";
+import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
+import { getLlmEnv } from "@/lib/env";
 
-export const llm = new ChatAnthropic({
-  apiKey: env.ANTHROPIC_API_KEY,
-  model: "claude-sonnet-4-6",
+export const llm = new ChatGoogleGenerativeAI({
+  apiKey: getLlmEnv().GEMINI_API_KEY,
+  model: "gemini-2.5-flash",
   temperature: 0.3,
 });
 ```
 
-- Model string set once here — never scattered.
+- Model string and provider set once here — never scattered, never imported elsewhere.
 - Default temperature 0.3 (routing, classification, summaries). Use 0.7 only for creative script generation, set per-call.
 - Structured output: ask for JSON, validate with zod, never trust raw output.
-- Never import `@langchain/anthropic` outside this file.
+- Never import a provider SDK (`@langchain/google-genai`, and later `@langchain/anthropic` / `@langchain/openai`) outside this file.
+- **Before production:** add Anthropic and OpenAI as fallback providers — LangChain's `.withFallbacks()` on a Runnable is the natural fit for "if one provider is down, the next carries on." Verify the current API against official docs when this is actually built, per this file's own rule of checking library docs before implementing. Until then, only Gemini is wired up.
 
 ---
 
@@ -272,7 +273,8 @@ Approved dependencies:
 
 - `@langchain/langgraph` — graph orchestration
 - `@langchain/core` — primitives
-- `@langchain/anthropic` — Claude (used only in `lib/llm.ts`)
+- `@langchain/google-genai` — Gemini, current LLM provider (used only in `lib/llm.ts`)
+- `@langchain/anthropic`, `@langchain/openai` — planned production fallback providers; not installed yet, add only when actually wired into `lib/llm.ts`
 - `express` — REST server
 - `mongodb` — database + GridFS + Atlas Vector Search
 - `zod` — validation
@@ -289,19 +291,27 @@ Do not add other packages without updating this list first.
 
 ## Environment Variables
 
-All env vars validated through `server/lib/env.ts` with zod at startup. Never hardcode a key, token, or URL.
+All env vars are parsed through `server/lib/env.ts` with zod — never read `process.env` directly anywhere else. Never hardcode a key, token, or URL. Validation is grouped, not all-or-nothing:
 
-| Variable                      | Used In                       |
-| ----------------------------- | ----------------------------- |
-| `ANTHROPIC_API_KEY`           | lib/llm.ts                    |
-| `MONGODB_URI`                 | db/client.ts                  |
-| `WHATSAPP_TOKEN`              | services/whatsapp.ts          |
-| `WHATSAPP_PHONE_ID`           | services/whatsapp.ts          |
-| `WHATSAPP_VERIFY_TOKEN`       | routes/whatsapp.ts (webhook)  |
-| `INSTAGRAM_TOKEN`             | services/instagram.ts         |
-| `INSTAGRAM_ACCOUNT_ID`        | services/instagram.ts         |
-| `YOUTUBE_API_KEY`             | services/youtube.ts           |
-| `GOOGLE_CALENDAR_CREDENTIALS` | services/google-calendar.ts   |
-| `EMBEDDING_API_KEY`           | rag/embeddings.ts             |
+- **Core** (`env`) — validated eagerly, at module load, before the server boots. The process refuses to start if any are missing. Reserved for vars every feature depends on, regardless of which features are built yet.
+- **Per-service** (`getLlmEnv()`, `getWhatsAppEnv()`, `getInstagramEnv()`, `getYouTubeEnv()`, `getGoogleCalendarEnv()`, `getEmbeddingEnv()`) — validated lazily, the first time the code that needs that integration actually calls its getter. The result is memoized after the first call. A feature should only require its own credentials once it's built and in use — earlier features shouldn't be blocked by env vars a later, unbuilt feature will eventually need.
+
+Both paths go through the same `parseEnv` / `lazyEnv` helpers in `lib/env.ts` — adding a new integration means adding one more lazy getter there, not a new ad-hoc parsing block elsewhere.
+
+| Variable                      | Group           | Used In                       |
+| ----------------------------- | --------------- | ------------------------------ |
+| `PORT`                        | core            | lib/env.ts                    |
+| `MONGODB_URI`                 | core            | db/client.ts                  |
+| `GEMINI_API_KEY`              | llm (lazy)      | lib/llm.ts                    |
+| `WHATSAPP_TOKEN`              | whatsapp (lazy) | services/whatsapp.ts          |
+| `WHATSAPP_PHONE_ID`           | whatsapp (lazy) | services/whatsapp.ts          |
+| `WHATSAPP_VERIFY_TOKEN`       | whatsapp (lazy) | routes/whatsapp.ts (webhook)  |
+| `INSTAGRAM_TOKEN`             | instagram (lazy)| services/instagram.ts         |
+| `INSTAGRAM_ACCOUNT_ID`        | instagram (lazy)| services/instagram.ts         |
+| `YOUTUBE_API_KEY`             | youtube (lazy)  | services/youtube.ts           |
+| `GOOGLE_CALENDAR_CREDENTIALS` | google-calendar (lazy) | services/google-calendar.ts |
+| `EMBEDDING_API_KEY`           | embeddings (lazy) | rag/embeddings.ts           |
+
+> **Note:** `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` aren't in this table yet — they get added (as their own lazy groups) once Anthropic and OpenAI are wired in as fallback providers before production. See the Model note in `architecture.md` and the LLM Usage section above.
 
 Frontend env vars (Vite) are prefixed `VITE_` and contain no secrets — only the API base URL.

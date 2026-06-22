@@ -7,8 +7,8 @@ Update this file after every completed feature. Any AI agent reading this should
 ## Current Status
 
 **Phase:** 1 — Foundation
-**Last completed:** 01 Monorepo Scaffold
-**Next:** 02 MongoDB Connection + Collections
+**Last completed:** 02 MongoDB Connection + Collections
+**Next:** 03 LLM Client + Graph Skeleton
 
 ---
 
@@ -17,7 +17,7 @@ Update this file after every completed feature. Any AI agent reading this should
 ### Phase 1 — Foundation
 
 - [x] 01 Monorepo Scaffold
-- [ ] 02 MongoDB Connection + Collections
+- [x] 02 MongoDB Connection + Collections
 - [ ] 03 LLM Client + Graph Skeleton
 - [ ] 04 Chat Route + Dashboard Shell
 
@@ -70,7 +70,7 @@ Update this file after every completed feature. Any AI agent reading this should
 
 _Add decisions here as they are made during implementation._
 
-- Model: Claude via `@langchain/anthropic` (not GPT-4o).
+- Model: Gemini via `@langchain/google-genai` for now (free tier, dev/test). Client is switching providers before production — Anthropic and OpenAI will be added as fallback providers once it's decided which they prefer; `lib/llm.ts` must keep the provider swappable so this never touches agent code.
 - Everything in MongoDB, including contract PDFs (GridFS) and RAG vectors (Atlas Vector Search).
 - TikTok stubbed until client gets API access.
 - Trends: both scheduled daily scan and on-demand.
@@ -78,6 +78,13 @@ _Add decisions here as they are made during implementation._
 - Only autonomous action: morning WhatsApp briefing (asks plan-for-day + reminds unfinished projects). DM replies and calendar adds always require approval.
 - Frontend folder is `client/`, not `web/` as architecture.md originally said — all context docs corrected to match the actual scaffold.
 - Server `tsconfig.json` uses `"moduleResolution": "bundler"` (not `"nodenext"`) so `@/` imports stay extension-less, matching the import style shown in `code-standards.md`. TypeScript 6 still needs `baseUrl` alongside `paths` for alias resolution to work, with `"ignoreDeprecations": "6.0"` to silence the TS7 deprecation error.
+- Confirmed MONGODB_URI points at an Atlas-tier cluster (required for $vectorSearch).
+- Added contracts index { brand: 1, status: 1 } for per-brand draft lookups (used in feature 20).
+- Vector search index (documents.embedding) is created via its own script, separate from the boot path — createSearchIndex builds asynchronously and shouldn't be able to block server startup for a feature (contracts, #20) that isn't built yet.
+- DB connection (`db/client.ts`): connect once at startup with a bounded retry (5 attempts, ~2s apart, each attempt logged); a client that fails to connect is closed before the next retry; no retry logic after the initial connect succeeds — the driver's own pool handles reconnection from then on.
+- `lib/env.ts` restructured: eager `core` schema (just `PORT`, `MONGODB_URI`) validated at module load/boot; everything else (LLM, WhatsApp, Instagram, YouTube, Google Calendar, embeddings) validated lazily via a per-integration getter (`getLlmEnv()`, `getWhatsAppEnv()`, etc.), the first time that integration's code actually runs. A feature's credentials are only required once that feature is built — earlier features aren't blocked by later ones' missing keys.
+- LLM key canonicalized as `GEMINI_API_KEY` (was already live in `env.ts`). Confirmed with the client: Gemini now for its free tier, with Anthropic + OpenAI added as fallback providers before production (preference TBD). `architecture.md`, `AGENTS.md`, `code-standards.md`, and `library-docs.md` were all updated to reflect this — `lib/llm.ts` itself is still feature 03's job; only the docs/decisions are settled now.
+- Added a graceful shutdown handler (`SIGINT`/`SIGTERM`) in `index.ts` that closes the MongoDB connection before exiting.
 
 ---
 
@@ -85,6 +92,9 @@ _Add decisions here as they are made during implementation._
 
 _Add notes here as the build progresses — workarounds, patterns, anything that differs from the context files._
 
-- `server/lib/env.ts` requires every token in `code-standards.md`'s env table (plus `PORT`, default 3001) — there is no phased/optional mode. The server will not boot without a `.env` (gitignored) that has a value, even a placeholder, for each one. Verified: missing vars throw a loud, structured error listing exactly which keys are absent; a fully-populated `.env` boots the server and `GET /health` returns `{ success: true, data: { status: "ok" } }`.
+- `server/lib/env.ts` (feature 01) originally required every token in `code-standards.md`'s env table up front, with no phased/optional mode — missing vars threw a loud, structured error listing exactly which keys were absent. **Superseded in feature 02**: only `PORT` + `MONGODB_URI` are validated at boot now; third-party/integration vars are validated lazily per-service (see Decisions above). `GET /health` still returns `{ success: true, data: { status: "ok" } }` once core validation + DB connection succeed.
 - Added `server/.gitignore` — none existed, so `server/node_modules` was previously unprotected from `git add`.
 - Installed for feature 01: `express`, `dotenv` (already present) + `zod` (added). The rest of the approved dependency list (`mongodb`, `@langchain/*`, `pdf-lib`, `node-cron`, `googleapis`) is intentionally not installed yet — each gets added when its feature is built, per `code-standards.md`'s "never install without a clear reason."
+- Feature 02: the Atlas Vector Search index (`documents.embedding`) is created via a separate one-off setup script, not on server boot — `createSearchIndex` builds asynchronously and shouldn't gate "boot done" or block the server for a feature (contracts, #20) that isn't live yet. Standard indexes (unique/compound) still run unconditionally on every boot via `createIndex`.
+- `createVectorSearchIndex()` creates the `documents` collection first if it doesn't exist yet — Atlas rejects `createSearchIndex`/`listSearchIndexes` with `NamespaceNotFound` against a collection with zero documents in it, which is the normal state until feature 18 (Document Ingest) runs. Discovered by actually running `npm run db:setup-search-index` against the real Atlas cluster before any documents existed.
+- All of feature 02's MongoDB code (connect/retry, standard indexes, vector index setup, seed) was verified against the real configured Atlas cluster — not mocked — including running the seed and vector-index scripts twice each to confirm idempotency, and a full server boot + `/health` check.

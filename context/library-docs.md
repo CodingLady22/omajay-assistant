@@ -87,9 +87,11 @@ export const app = graph.compile();
 
 ---
 
-## Claude via @langchain/anthropic
+## Gemini via @langchain/google-genai
 
-**Check first:** Official `@langchain/anthropic` docs for current model strings and message API.
+**Check first:** Official `@langchain/google-genai` docs for current model strings and message API.
+
+Gemini is the LLM provider for now — it has a free tier that's good for development and testing. Before production, Anthropic and OpenAI get added as fallback providers (the client hasn't decided which they'll prefer), so `lib/llm.ts` stays the only file that knows which provider is active.
 
 Single client in `lib/llm.ts` (see `code-standards.md`). Use it for:
 
@@ -113,10 +115,16 @@ const parsed = ScriptSchema.parse(JSON.parse(extractJson(raw.content)));
 
 **Rules:**
 
-- Model string lives only in `lib/llm.ts`.
+- Model string and provider live only in `lib/llm.ts`.
 - Temperature 0.3 default; 0.7 for `content-agent` script generation (pass per-call).
 - Always validate structured output with zod — never trust raw text.
 - Keep classification prompts tight and closed — the orchestrator returns one label, nothing else.
+
+**Before production — multi-provider fallback:**
+
+- Add Anthropic (`@langchain/anthropic`) and OpenAI (`@langchain/openai`) alongside Gemini so a single provider outage doesn't take the assistant down. LangChain's `.withFallbacks([...])` on a Runnable is the natural fit for "try provider A, fall back to B, then C" — verify the current API against official docs when this is actually built, same as every other library in this file.
+- Which provider(s) the client ultimately prefers isn't decided yet — keep all three wired and swappable rather than picking a permanent favorite now.
+- This must stay invisible to agent code: agents call the exported `llm` exactly as they do today; only `lib/llm.ts` changes.
 
 ---
 
