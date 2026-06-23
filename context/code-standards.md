@@ -36,7 +36,7 @@ Operate as a senior engineer:
 - Route files in `server/routes/` — parse request, call one agent node or service, return the response wrapper. No reasoning in routes.
 - Agent logic in `server/agents/` only. Never in routes, never in services.
 - Third-party API calls in `server/services/` only. Services don't reason and don't make LLM calls.
-- All LLM calls go through `server/lib/llm.ts`. Never import a provider SDK (`@langchain/google-genai` now; `@langchain/anthropic` / `@langchain/openai` later) anywhere else.
+- All LLM calls go through `server/lib/llm.ts`. Never import a provider SDK (`@langchain/google` now; `@langchain/anthropic` / `@langchain/openai` later) anywhere else.
 - All MongoDB access through typed accessors in `server/db/collections.ts`. Never reach into a raw collection from a route or agent.
 - Always read library docs / skills before using a third-party API — versions drift from training data. See `library-docs.md`.
 
@@ -90,6 +90,8 @@ export default router;
 
 ## Agent Nodes (LangGraph)
 
+> **Not yet implemented (as of feature 03):** `logAgentError` below is the target state, not the current code. `agent_runs`/`agent_logs` collections exist (feature 02) but nothing writes to them yet — building that now would be persistence plumbing nothing reads back. Nodes currently use `logger.error()` on their real failure paths instead (see the orchestrator, feature 03's only node with one). Wire `logAgentError` in whichever feature first needs to read agent logs back, then this template is accurate as written.
+
 ```typescript
 // server/agents/trends-agent.ts
 import { AgentState } from "@/agents/state";
@@ -139,14 +141,16 @@ export async function fetchTrendingMakeupVideos(): Promise<YouTubeTrend[]> {
 
 ## LLM Usage
 
-All LLM calls go through one place. Provider is Gemini for now — free tier, good for development and testing. Before production, Anthropic and OpenAI get added as fallback providers (the client hasn't decided which they'll prefer), so `lib/llm.ts` must keep the provider swappable without any agent file knowing which one is active:
+All LLM calls go through one place. Provider is Gemini for now — free tier, good for development and testing. Before production, Anthropic and OpenAI get added as fallback providers (the client hasn't decided which they'll prefer), so `lib/llm.ts` must keep the provider swappable without any agent file knowing which one is active.
+
+> **Package note (2026-06-22):** `@langchain/google-genai` (the package originally named here) carries an active deprecation notice pointing to `@langchain/google` as its successor — confirmed against the installed package (`@langchain/google@0.2.1`) when feature 03 was built. Switched before any code was written, so no migration debt was incurred. `@langchain/google` is pre-1.0 (0.2.x) — re-check its stability during the pre-production multi-provider hardening pass below.
 
 ```typescript
 // server/lib/llm.ts
-import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
+import { ChatGoogle } from "@langchain/google/node";
 import { getLlmEnv } from "@/lib/env";
 
-export const llm = new ChatGoogleGenerativeAI({
+export const llm = new ChatGoogle({
   apiKey: getLlmEnv().GEMINI_API_KEY,
   model: "gemini-2.5-flash",
   temperature: 0.3,
@@ -156,7 +160,8 @@ export const llm = new ChatGoogleGenerativeAI({
 - Model string and provider set once here — never scattered, never imported elsewhere.
 - Default temperature 0.3 (routing, classification, summaries). Use 0.7 only for creative script generation, set per-call.
 - Structured output: ask for JSON, validate with zod, never trust raw output.
-- Never import a provider SDK (`@langchain/google-genai`, and later `@langchain/anthropic` / `@langchain/openai`) outside this file.
+- Never import a provider SDK (`@langchain/google`, and later `@langchain/anthropic` / `@langchain/openai`) outside this file.
+- Import from `@langchain/google/node` (the Node-specific entrypoint), not the bare `@langchain/google` package root — this is a Node/Express server, and the docs use the `/node` entrypoint accordingly.
 - **Before production:** add Anthropic and OpenAI as fallback providers — LangChain's `.withFallbacks()` on a Runnable is the natural fit for "if one provider is down, the next carries on." Verify the current API against official docs when this is actually built, per this file's own rule of checking library docs before implementing. Until then, only Gemini is wired up.
 
 ---
@@ -273,7 +278,7 @@ Approved dependencies:
 
 - `@langchain/langgraph` — graph orchestration
 - `@langchain/core` — primitives
-- `@langchain/google-genai` — Gemini, current LLM provider (used only in `lib/llm.ts`)
+- `@langchain/google` — Gemini, current LLM provider (used only in `lib/llm.ts`, imported via its `/node` entrypoint)
 - `@langchain/anthropic`, `@langchain/openai` — planned production fallback providers; not installed yet, add only when actually wired into `lib/llm.ts`
 - `express` — REST server
 - `mongodb` — database + GridFS + Atlas Vector Search

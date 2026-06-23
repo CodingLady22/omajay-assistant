@@ -100,4 +100,4 @@ If any of these MCP connectors are configured, prefer them over manual API calls
 
 ## Stack At A Glance
 
-React + Vite + Tailwind v4 (client) · Node + Express + TypeScript (server) · LangGraph.js + LangChain.js · Gemini via `@langchain/google-genai` (primary for now — free tier for dev/test; Anthropic + OpenAI planned as production fallback providers, client preference TBD) · MongoDB (data + GridFS + Atlas Vector Search) · WhatsApp Cloud API · Instagram Graph API · YouTube Data API · Google Calendar API · pdf-lib · node-cron. TypeScript everywhere, strict. REST API.
+React + Vite + Tailwind v4 (client) · Node + Express + TypeScript (server) · LangGraph.js + LangChain.js · Gemini via `@langchain/google` (primary for now — free tier for dev/test; Anthropic + OpenAI planned as production fallback providers, client preference TBD) · MongoDB (data + GridFS + Atlas Vector Search) · WhatsApp Cloud API · Instagram Graph API · YouTube Data API · Google Calendar API · pdf-lib · node-cron. TypeScript everywhere, strict. REST API.

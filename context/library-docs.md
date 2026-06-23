@@ -81,17 +81,19 @@ export const app = graph.compile();
 
 - One specialist node runs per message — no fan-out.
 - The briefing agent is **not** in this graph — it's called directly by the scheduler.
-- Every node returns `Partial<AgentState>` with at least `response`.
+- Every specialist node returns `Partial<AgentState>` with at least `response`. The orchestrator is exempt — its job is classification, so it returns only `{ intent }`; the routed specialist node sets `response` next.
 - The router reads `state.intent` set by the orchestrator — never re-classifies.
 - Never add an intent without updating `architecture.md`, the orchestrator prompt, and the conditional edges together.
 
 ---
 
-## Gemini via @langchain/google-genai
+## Gemini via @langchain/google
 
-**Check first:** Official `@langchain/google-genai` docs for current model strings and message API.
+**Check first:** Official `@langchain/google` docs for current model strings and message API — this package is young (0.2.x) and actively evolving.
 
 Gemini is the LLM provider for now — it has a free tier that's good for development and testing. Before production, Anthropic and OpenAI get added as fallback providers (the client hasn't decided which they'll prefer), so `lib/llm.ts` stays the only file that knows which provider is active.
+
+**Note:** `@langchain/google-genai` was the originally planned package, but it carries an active deprecation notice pointing to `@langchain/google` as its replacement. Switched to `@langchain/google` during feature 03, before any code was written against the old package. Import `ChatGoogle` from `@langchain/google/node` (the Node-specific entrypoint), not the package root.
 
 Single client in `lib/llm.ts` (see `code-standards.md`). Use it for:
 

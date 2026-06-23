@@ -6,6 +6,7 @@
     "dev": "tsx watch src/index.ts",
     "db:seed": "tsx src/db/run-seed.ts",
     "db:setup-search-index": "tsx src/db/run-setup-search-index.ts",
+    "graph:test": "tsx src/agents/run-graph-test.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -14,6 +15,9 @@
   "description": "",
   "type": "module",
   "dependencies": {
+    "@langchain/core": "^1.2.1",
+    "@langchain/google": "^0.2.1",
+    "@langchain/langgraph": "^1.4.5",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "mongodb": "^7.3.0",
