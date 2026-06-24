@@ -8,7 +8,7 @@
 | Styling           | Tailwind CSS v4                       | UI styling via `@theme` tokens                     |
 | Backend           | Node.js + Express + TypeScript        | REST API server                                    |
 | Agent framework   | LangGraph.js + LangChain.js           | Multi-agent orchestration                          |
-| LLM               | Gemini via `@langchain/google-genai`  | Routing, scripts, summaries, contract drafting     |
+| LLM               | Gemini via `@langchain/google`        | Routing, scripts, summaries, contract drafting     |
 | Database          | MongoDB                               | All data — documents, state, cache                 |
 | Vector search     | MongoDB Atlas Vector Search           | RAG over rate cards + old contracts                |
 | Messaging         | WhatsApp Cloud API (Meta)             | Primary interface — send + receive                 |
@@ -19,7 +19,7 @@
 | Scheduling        | node-cron                             | Daily trends scan + morning briefing               |
 | Validation        | zod                                   | Schema validation everywhere                       |
 
-> **Model note:** This project uses Gemini for now (`@langchain/google-genai`) — it has a free tier suited to development and testing. Before production, Anthropic and OpenAI will be added as fallback providers so the assistant survives a single provider outage; which provider(s) the client ultimately prefers isn't decided yet. Because the provider is expected to change and multiply, `lib/llm.ts` must expose one provider-agnostic client that every agent imports — no agent file may import a provider SDK directly or hardcode a model string, so adding or swapping providers later never touches agent code.
+> **Model note:** This project uses Gemini for now (`@langchain/google`, imported from its `/node` entrypoint — the package replacing the now-deprecated `@langchain/google-genai`) — it has a free tier suited to development and testing. Before production, Anthropic and OpenAI will be added as fallback providers so the assistant survives a single provider outage; which provider(s) the client ultimately prefers isn't decided yet. Because the provider is expected to change and multiply, `lib/llm.ts` must expose one provider-agnostic client that every agent imports — no agent file may import a provider SDK directly or hardcode a model string, so adding or swapping providers later never touches agent code.
 
 ---
 

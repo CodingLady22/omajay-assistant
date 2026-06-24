@@ -1,53 +1,45 @@
-# Memory — Feature 02: MongoDB Connection + Collections (+ LLM provider decision)
+# Memory — Feature 03: LLM Client + Graph Skeleton
 
-Last updated: 2026-06-21
+Last updated: 2026-06-23
 
 ## What was built
 
-- **Feature 02, fully built and reviewed:**
-  - `server/src/types/index.ts` — typed document shapes for all 10 collections in `architecture.md` (`Profile`, `Trend`, `ScriptDoc`, `Dm`, `EventDoc`, `DocumentChunk`, `ContractDoc`, `Briefing`, `AgentRun`, `AgentLog`). `_id` is optional on every type (required to satisfy the driver's `OptionalUnlessRequiredId` insert typing).
-  - `server/src/db/client.ts` — connection singleton. `connectToDatabase()` retries up to 5 times (~2s apart, each attempt logged, failed clients closed before retrying) then throws. `getDb()` throws if called before connecting. `closeDatabaseConnection()` for shutdown.
-  - `server/src/db/collections.ts` — typed accessor per collection.
-  - `server/src/db/indexes.ts` — `createStandardIndexes()` (unique `trends.external_id`, unique `dms.ig_thread_id`, `events.start`, compound `contracts.{brand,status}`) runs on every boot. `createVectorSearchIndex()` is kept OUT of the boot path, existence-checked via `listSearchIndexes`, auto-creates the `documents` collection first if missing. `EMBEDDING_DIMENSIONS` (currently `1024`) is a named, exported, commented-as-provisional constant — update it when feature 18 picks the real embedding model.
-  - `server/src/db/seed.ts` + `run-seed.ts` — idempotent seed of one `profile` doc for Sofia Caruso.
-  - `server/src/db/run-setup-search-index.ts` — CLI entrypoint for the vector index script.
-  - `server/src/index.ts` — boot sequence is connect → standard indexes → `app.listen`; added `SIGINT`/`SIGTERM` handlers that close the DB connection before exiting.
-  - `server/src/lib/env.ts` — restructured from one all-or-nothing eager schema into eager **core** (`PORT`, `MONGODB_URI`) + lazy per-service getters (`getLlmEnv`, `getWhatsAppEnv`, `getInstagramEnv`, `getYouTubeEnv`, `getGoogleCalendarEnv`, `getEmbeddingEnv`), each validated and memoized on first call.
-  - `server/src/lib/utils.ts` — added `sleep(ms)`.
-  - `server/package.json` — added `mongodb` dependency; added `db:seed` and `db:setup-search-index` scripts.
-  - `server/.env.example` — `ANTHROPIC_API_KEY` → `GEMINI_API_KEY`.
+- **Feature 03, fully built, verified, and reviewed:**
+  - `server/src/lib/llm.ts` — exports `llm`, a `ChatGoogle` instance (from `@langchain/google/node`) using `getLlmEnv().GEMINI_API_KEY`, model `gemini-2.5-flash`, temperature 0.3.
+  - `server/src/agents/state.ts` — `AgentState` (`Annotation.Root`: `input`, `channel`, `intent`, `response`, `runId`, `approval`).
+  - `server/src/agents/orchestrator.ts` — one LLM call classifies `state.input` into one of the seven fixed intents; output is hard-validated against a zod enum (trimmed/lowercased), anything that doesn't match exactly — or any LLM-call failure — coerces to `smalltalk`. LLM-call failures are caught and logged via `logger.error()`.
+  - Five stub specialist nodes (`trends-agent.ts`, `content-agent.ts`, `calendar-agent.ts`, `dms-agent.ts`, `contracts-agent.ts`) — each returns a fixed placeholder response (e.g. `"[trends] stub response"`), no try/catch (no I/O yet, so nothing to catch).
+  - `server/src/agents/graph.ts` — compiled `StateGraph` wiring `orchestrator` → the five stubs via `addConditionalEdges`, matching the fixed intent map.
+  - `server/src/agents/run-graph-test.ts` + `npm run graph:test` — CLI verification script (no HTTP route exists until feature 04, so this script stands in as the caller): generates one `runId` per sample input, invokes the compiled graph directly, logs intent + response.
+  - Installed: `@langchain/langgraph`, `@langchain/core`, `@langchain/google` (deliberately **not** `@langchain/google-genai` — see Decisions).
 
-- **LLM provider switched to Gemini** (client confirmed: free tier for dev/test; Anthropic + OpenAI to be added as production fallback later, preference TBD). Updated `AGENTS.md`, `context/architecture.md`, `context/code-standards.md`, `context/library-docs.md`, `context/build-plan.md`, `context/progress-tracker.md` to say Gemini/`@langchain/google-genai`/`GEMINI_API_KEY` everywhere instead of Claude/Anthropic, including a forward note in each to use LangChain's `.withFallbacks()` when Anthropic/OpenAI are added. **`server/src/lib/llm.ts` itself does NOT exist yet** — that's feature 03.
-
-- **`AGENTS.md` corrected**: the five skills (`architect`, `remember`, `review`, `imprint`, `recover`) are plain files at `.agents/skills/<name>/SKILL.md` in this harness, not registered slash commands — AGENTS.md previously described them as `/architect` etc., which doesn't work here.
+- **Context docs updated:** `AGENTS.md`, `architecture.md`, `code-standards.md`, `library-docs.md`, `progress-tracker.md` — all updated for the package switch, the deferred `logAgentError`, and a tightened rule about which nodes must set `response`.
 
 ## Decisions made
 
-- DB connection: connect once at startup, fail-fast, bounded retry (5×, ~2s apart, logged) on the initial connect only — no retry afterward, the driver's own pool handles reconnection.
-- Index strategy split: standard indexes are cheap/idempotent and run on every boot; the vector search index is deliberately excluded from boot (Atlas's `createSearchIndex` builds asynchronously and shouldn't gate "boot done" for a feature, contracts/#20, that isn't built yet) — it's a separate, existence-checked script instead.
-- GridFS is explicitly out of scope for feature 02 — deferred to feature 20, per "build only what the feature needs."
-- `env.ts`: a feature's credentials should only be required once that feature is actually built, not all up front — hence core vs. lazy-per-service validation.
-- LLM: Gemini now, Anthropic + OpenAI as fallback (not replacement) before production, client preference undecided — `lib/llm.ts` must stay the only file that knows which provider is active; no agent file may import a provider SDK directly.
+- **Switched `@langchain/google-genai` → `@langchain/google`.** Found mid-build that `@langchain/google-genai` (the package named throughout the original docs) carries an active deprecation notice pointing to `@langchain/google`. Confirmed by installing the package and reading its real `.d.ts` files — no migration debt incurred since this was caught before any code was written against the old package. `ChatGoogle` must be imported from the `/node` entrypoint (`@langchain/google/node`), not the package root — confirmed directly from `node_modules/@langchain/google/dist/chat_models/node.d.ts`. The package is pre-1.0 (`0.2.1`); `code-standards.md` flags it for a stability re-check during the pre-production multi-provider hardening pass.
+- **`runId`** is generated once by the caller (the future route/webhook; the test script stands in for now) — never inside a node.
+- **`logAgentError` deferred** to the first feature that actually reads agent logs back (debug tooling or a review pass). Nodes use `logger.error()` until then. This gap is documented in two places: a decision note in `progress-tracker.md`, and — after the review caught that the first pass missed it — a caveat directly above `code-standards.md`'s Agent Nodes template, so a future session doesn't "fix" the code to match the template instead of recognizing the template is aspirational.
+- **`library-docs.md` rule tightened:** "every node returns `Partial<AgentState>` with at least `response`" → "every *specialist* node" — the orchestrator is explicitly exempted since its only job is classification (it returns `{ intent }` only).
+- **Recorded, not built:** once `content-agent` stops being a stub (phase 4, feature 11), the orchestrator's smalltalk-fallback-on-classification-failure path needs a real user-facing message (e.g. "I didn't catch that — try again") instead of silently landing in the real content agent with no explanation. Noted in `progress-tracker.md`.
 
 ## Problems solved
 
-- MongoDB driver's `OptionalUnlessRequiredId<TSchema>` only relaxes `_id` to optional-on-insert if the schema itself declares `_id?: ObjectId` — declaring it required broke `insertOne` typing. Fixed by making `_id` optional on every document type.
-- `createVectorSearchIndex()` failed with `NamespaceNotFound` because the `documents` collection doesn't exist until feature 18 ingests something — fixed by creating the collection first if missing.
-- `env.ts`'s old all-or-nothing eager validation blocked verifying feature 02 in isolation (every third-party key had to exist just to boot) — restructuring into core+lazy also surfaced and resolved the stale `ANTHROPIC_API_KEY`-vs-`GEMINI_API_KEY` naming conflict in the docs.
-- Windows/Git Bash can't reliably deliver a real `SIGINT` cross-process (`process.kill(pid, 'SIGINT')` on Windows generally does a hard `TerminateProcess` instead) — couldn't directly verify the new graceful-shutdown handler end-to-end in this sandbox. The code is the standard Node.js idiom and `closeDatabaseConnection()` itself is already proven (used successfully by `run-seed.ts`/`run-setup-search-index.ts`); this is a tooling limitation, not a known defect.
-- `npx tsc` can resolve to a bogus stub package instead of the local TypeScript install depending on cwd — use `./node_modules/.bin/tsc` directly from `server/` instead.
+- `@langchain/google`'s real constructor/import shape couldn't be reliably pinned down from web docs alone (conflicting info on import path, version claims, stability) — resolved by installing the package and reading its actual `.d.ts` files directly: `ChatGoogle` (aliased from `ChatGoogleNode`) lives at `@langchain/google/node`, constructor takes `{ apiKey, model, temperature, ... }`.
+- `server/.env` had a `GEMINI_API_KEY=` line with an empty value (key never actually set, despite the line existing) — caught because the live verification step failed loudly instead of being silently mocked/skipped. User filled in the real key; verification then passed cleanly against the live Gemini API.
 
 ## Current state
 
-- Features 01 and 02 are both complete and ticked off in `context/progress-tracker.md`. Feature 02 went through the `review` skill (2 minor issues found — no client cleanup on retry, no graceful shutdown — both fixed and re-verified).
-- Everything was verified against the real configured Atlas cluster, not mocked: connect+retry, standard indexes (idempotent across repeat boots), vector-index setup script (idempotent across repeat runs), seed script (idempotent across repeat runs), full server boot + `GET /health`.
-- The LLM provider decision (Gemini now, Anthropic/OpenAI fallback later) is settled and propagated across every context doc, but no LLM code exists yet.
-- Nothing is committed to git this session — `git status` shows everything as unstaged modifications/untracked (`AGENTS.md`, all touched `context/*.md`, `server/.env.example`, `server/package.json`/`package-lock.json`, `server/src/index.ts`, `server/src/lib/env.ts`, `server/src/lib/utils.ts` modified; `server/src/db/`, `server/src/types/` untracked).
+- Features 01, 02, and 03 are all complete, reviewed, and ticked off in `context/progress-tracker.md`. Phase 1 — Foundation has one feature left.
+- `npm run graph:test` passes against the live Gemini API: all 7 sample inputs (one per intent + one deliberately ambiguous "good morning!") classify correctly, including `smalltalk` falling through to the content stub.
+- `tsc --noEmit` is clean.
+- Nothing has been committed to git yet this session — consistent with every prior session on this project.
 
 ## Next session starts with
 
-Feature 03 — LLM Client + Graph Skeleton: `server/lib/llm.ts` (Gemini via `@langchain/google-genai`, one provider-agnostic export — install the package first, it isn't in yet), `server/agents/state.ts` (`AgentState`), `server/agents/graph.ts` (orchestrator + placeholder nodes returning stub responses), `server/agents/orchestrator.ts` (intent classification into the fixed set, defaults to `smalltalk`). Read `.agents/skills/architect/SKILL.md` and run that process manually first, per the engineering loop — it is not a slash command in this harness.
+Feature 04 — Chat Route + Dashboard Shell: `POST /api/chat` (runs the graph with `channel: "web"`, returns `{ success, data: { response } }`), plus the `/client` dashboard shell (sidebar + topbar + panel switching matching `context/designs/glam-ai.html`), with the chat panel wired to `/api/chat` to confirm the stub reply round-trips. Read `.agents/skills/architect/SKILL.md` and run that process first, per the engineering loop — it's not a slash command in this harness.
 
 ## Open questions
 
-- Nothing blocking feature 03. Worth checking with the user whether to commit features 01+02 as a checkpoint before starting feature 03 — nothing has been committed yet across either session.
+- Worth checking with the user whether to commit features 01–03 as a checkpoint before starting feature 04 — nothing has been committed across any session so far.
+- `@langchain/google` is pre-1.0 (0.2.x) — no action needed now, but flagged for a stability re-check during the pre-production multi-provider hardening pass (when Anthropic/OpenAI fallbacks get added).

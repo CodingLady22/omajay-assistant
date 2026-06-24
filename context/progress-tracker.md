@@ -7,8 +7,8 @@ Update this file after every completed feature. Any AI agent reading this should
 ## Current Status
 
 **Phase:** 1 — Foundation
-**Last completed:** 02 MongoDB Connection + Collections
-**Next:** 03 LLM Client + Graph Skeleton
+**Last completed:** 03 LLM Client + Graph Skeleton
+**Next:** 04 Chat Route + Dashboard Shell
 
 ---
 
@@ -18,7 +18,7 @@ Update this file after every completed feature. Any AI agent reading this should
 
 - [x] 01 Monorepo Scaffold
 - [x] 02 MongoDB Connection + Collections
-- [ ] 03 LLM Client + Graph Skeleton
+- [x] 03 LLM Client + Graph Skeleton
 - [ ] 04 Chat Route + Dashboard Shell
 
 ### Phase 2 — WhatsApp
@@ -85,6 +85,9 @@ _Add decisions here as they are made during implementation._
 - `lib/env.ts` restructured: eager `core` schema (just `PORT`, `MONGODB_URI`) validated at module load/boot; everything else (LLM, WhatsApp, Instagram, YouTube, Google Calendar, embeddings) validated lazily via a per-integration getter (`getLlmEnv()`, `getWhatsAppEnv()`, etc.), the first time that integration's code actually runs. A feature's credentials are only required once that feature is built — earlier features aren't blocked by later ones' missing keys.
 - LLM key canonicalized as `GEMINI_API_KEY` (was already live in `env.ts`). Confirmed with the client: Gemini now for its free tier, with Anthropic + OpenAI added as fallback providers before production (preference TBD). `architecture.md`, `AGENTS.md`, `code-standards.md`, and `library-docs.md` were all updated to reflect this — `lib/llm.ts` itself is still feature 03's job; only the docs/decisions are settled now.
 - Added a graceful shutdown handler (`SIGINT`/`SIGTERM`) in `index.ts` that closes the MongoDB connection before exiting.
+- **Feature 03 — switched LLM package from `@langchain/google-genai` to `@langchain/google`.** `@langchain/google-genai` (named throughout the original context docs) carries an active deprecation notice pointing to `@langchain/google` as its replacement. Confirmed directly against the installed package (`@langchain/google@0.2.1`) before writing `lib/llm.ts`, so no migration debt was incurred. `ChatGoogle` is imported from the `/node` entrypoint (`@langchain/google/node`), not the package root. `architecture.md`, `code-standards.md`, `library-docs.md`, and the approved dependency list were all updated to match. `@langchain/google` is pre-1.0 (0.2.x) — worth re-checking its stability during the pre-production multi-provider hardening pass.
+- **`logAgentError` deferred.** `code-standards.md`'s node template shows every node's catch block calling `logAgentError(state.runId, error)`, but that helper was never built — `agent_runs`/`agent_logs` collections and types exist (from feature 02) but nothing writes to them yet. Feature 03's orchestrator (the only node in this skeleton with a real failure mode — the live Gemini call) uses the existing `logger.error()` instead. `logAgentError` is intentionally deferred to the first feature that actually needs to read agent logs back (debug tooling or a review pass) — building the Mongo-backed writer now would be persistence plumbing nothing in feature 03 reads or verifies. `code-standards.md` carries a caveat next to the template noting this gap.
+- **Orchestrator failure path is a known short-term simplification.** On a classification failure, the orchestrator currently falls back to `intent: "smalltalk"`, which routes to the `content` stub — fine while `content` is still a placeholder. Once `content` becomes the real script-writing agent (phase 4, feature 11), a classification failure must no longer silently land there with no explanation. Add a proper user-facing fallback at that point (e.g. "I didn't catch that — try again") instead of relying on the smalltalk route. Not built now — recorded so it isn't forgotten.
 
 ---
 
@@ -98,3 +101,6 @@ _Add notes here as the build progresses — workarounds, patterns, anything that
 - Feature 02: the Atlas Vector Search index (`documents.embedding`) is created via a separate one-off setup script, not on server boot — `createSearchIndex` builds asynchronously and shouldn't gate "boot done" or block the server for a feature (contracts, #20) that isn't live yet. Standard indexes (unique/compound) still run unconditionally on every boot via `createIndex`.
 - `createVectorSearchIndex()` creates the `documents` collection first if it doesn't exist yet — Atlas rejects `createSearchIndex`/`listSearchIndexes` with `NamespaceNotFound` against a collection with zero documents in it, which is the normal state until feature 18 (Document Ingest) runs. Discovered by actually running `npm run db:setup-search-index` against the real Atlas cluster before any documents existed.
 - All of feature 02's MongoDB code (connect/retry, standard indexes, vector index setup, seed) was verified against the real configured Atlas cluster — not mocked — including running the seed and vector-index scripts twice each to confirm idempotency, and a full server boot + `/health` check.
+- Feature 03 built: `server/src/lib/llm.ts` (Gemini client), `server/src/agents/state.ts` (`AgentState`), `server/src/agents/orchestrator.ts` (closed-set intent classification, hard-validated with a zod enum, falls back to `smalltalk` on any invalid output or LLM-call failure), five stub nodes (`trends-agent.ts`, `content-agent.ts`, `calendar-agent.ts`, `dms-agent.ts`, `contracts-agent.ts`, each returning a fixed placeholder response with no try/catch since they have no I/O yet), `server/src/agents/graph.ts` (compiled `StateGraph` wiring orchestrator → specialist via `addConditionalEdges`), and `server/src/agents/run-graph-test.ts` (`npm run graph:test` — generates a `runId` per sample input, the way the future route/webhook caller will, and invokes the compiled graph directly since no HTTP route exists until feature 04).
+- Verified `npm run graph:test` against the live Gemini API (not mocked): all seven sample inputs — one per intent plus an ambiguous "good morning!" — classified correctly, including the smalltalk default routing to the content stub.
+- `runId` is generated once by the caller (the test script here; the route/webhook in feature 04) and only ever read by nodes, never generated inside one — keeps every log line for a single message traceable to one id once `logAgentError` exists.
