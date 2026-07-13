@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import { ChatPage } from "@/pages/ChatPage";
@@ -15,7 +15,7 @@ export function App() {
 
   return (
     <div className="flex min-h-screen w-full items-center justify-center bg-background lg:p-5">
-      <div className="flex h-screen w-full overflow-hidden bg-surface lg:h-[calc(100vh-2.5rem)] lg:max-w-[900px] lg:rounded-[14px] lg:border-[0.5px] lg:border-border lg:shadow-[0_8px_40px_rgba(80,20,40,0.10),0_1.5px_4px_rgba(80,20,40,0.06)]">
+      <div className="flex h-screen w-full overflow-hidden bg-surface lg:h-[calc(100vh-2.5rem)] lg:max-w-225 lg:rounded-lg lg:border-[0.5px] lg:border-border lg:shadow-shell">
         <Sidebar isMobileOpen={isMobileNavOpen} onClose={() => setIsMobileNavOpen(false)} />
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar onOpenMobileNav={() => setIsMobileNavOpen(true)} />
@@ -27,6 +27,7 @@ export function App() {
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/dms" element={<DmsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
       </div>

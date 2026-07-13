@@ -51,6 +51,9 @@
   --radius-md: 10px;
   --radius-lg: 14px;
   --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-shell: 0 8px 40px rgba(80, 20, 40, 0.10), 0 1.5px 4px rgba(80, 20, 40, 0.06);
 }
 
 body {

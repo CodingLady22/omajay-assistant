@@ -80,6 +80,9 @@ className="bg-pink-500 text-gray-600"
   --radius-md: 10px;
   --radius-lg: 14px;
   --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-shell: 0 8px 40px rgba(80, 20, 40, 0.10), 0 1.5px 4px rgba(80, 20, 40, 0.06);
 }
 ```
 
@@ -183,8 +186,8 @@ Import both via Google Fonts in `client/index.html` or `@import` in `index.css`.
 ```
 background: bg-surface
 border: 0.5px solid var(--color-border)
-border-radius: 14px (--radius-lg)
-box-shadow: 0 8px 40px rgba(80,20,40,0.10), 0 1.5px 4px rgba(80,20,40,0.06)
+border-radius: 14px (--radius-lg)   → rounded-lg
+box-shadow: --shadow-shell          → shadow-shell
 ```
 
 Panels and cards are always white surfaces. Colour lives inside via badges, dots, and text — never on the card background.

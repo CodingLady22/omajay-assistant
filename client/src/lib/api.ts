@@ -8,6 +8,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<ApiResponse
       ...init,
       headers: { "Content-Type": "application/json", ...init?.headers },
     });
+    // res.json() returns `any`; the assertion is unavoidable here — every route
+    // returns the same { success, data? | error? } wrapper validated by zod server-side.
     return (await res.json()) as ApiResponse<T>;
   } catch (error) {
     console.error("[lib/api]", error);

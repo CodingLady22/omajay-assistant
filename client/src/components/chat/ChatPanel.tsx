@@ -46,7 +46,7 @@ export function ChatPanel() {
     setIsTyping(false);
 
     const replyText = result.success
-      ? result.data.response
+      ? (result.data.response ?? "Something went wrong — try again.")
       : result.error;
 
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "ai", text: replyText }]);
@@ -55,7 +55,7 @@ export function ChatPanel() {
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>): void {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      void handleSend(input);
+      if (!isTyping) void handleSend(input);
     }
   }
 
@@ -108,7 +108,8 @@ export function ChatPanel() {
           <button
             type="button"
             onClick={() => void handleSend(input)}
-            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md bg-pink text-white transition-opacity hover:opacity-85"
+            disabled={isTyping}
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md bg-pink text-white transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-40"
             aria-label="Send message"
           >
             <ArrowUp size={16} />
