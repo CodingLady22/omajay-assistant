@@ -52,6 +52,9 @@ className="bg-pink-500 text-gray-600"
   /* Borders */
   --color-border: #e8dde4;
 
+  /* Backdrop — modal/drawer scrim, used with an opacity modifier (e.g. bg-backdrop/40) */
+  --color-backdrop: #000000;
+
   /* Text */
   --color-text-primary: #1a1118;
   --color-text-secondary: #7a6472;
@@ -132,6 +135,10 @@ Used for: active nav item, primary buttons, send button, brand accents, unread d
 ### WhatsApp "On" States
 
 Toggle/status text that reads "On" uses `text-success`.
+
+### Overlays
+
+Any modal, drawer, or sheet that sits above page content uses `bg-backdrop` with an opacity modifier for its scrim — e.g. `bg-backdrop/40`. Used by the mobile sidebar drawer; reuse for future confirm/approve modals (calendar add, DM send approval, contract review) instead of a one-off `bg-black/*`.
 
 ---
 

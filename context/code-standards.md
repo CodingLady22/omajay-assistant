@@ -288,6 +288,7 @@ Approved dependencies:
 - `googleapis` — Google Calendar
 - `axios` or native `fetch` — HTTP to WhatsApp / Instagram / YouTube
 - React, Vite, Tailwind v4 — frontend
+- `react-router-dom` — dashboard routing (real paths per `project-overview.md`'s page list)
 - `lucide-react` — dashboard icons
 
 Do not add other packages without updating this list first.

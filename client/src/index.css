@@ -23,6 +23,9 @@
   /* Borders */
   --color-border: #e8dde4;
 
+  /* Backdrop — modal/drawer scrim, used with an opacity modifier (e.g. bg-backdrop/40) */
+  --color-backdrop: #000000;
+
   /* Text */
   --color-text-primary: #1a1118;
   --color-text-secondary: #7a6472;
