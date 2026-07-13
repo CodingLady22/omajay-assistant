@@ -52,6 +52,9 @@ className="bg-pink-500 text-gray-600"
   /* Borders */
   --color-border: #e8dde4;
 
+  /* Backdrop — modal/drawer scrim, used with an opacity modifier (e.g. bg-backdrop/40) */
+  --color-backdrop: #000000;
+
   /* Text */
   --color-text-primary: #1a1118;
   --color-text-secondary: #7a6472;
@@ -77,6 +80,9 @@ className="bg-pink-500 text-gray-600"
   --radius-md: 10px;
   --radius-lg: 14px;
   --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-shell: 0 8px 40px rgba(80, 20, 40, 0.10), 0 1.5px 4px rgba(80, 20, 40, 0.06);
 }
 ```
 
@@ -133,6 +139,10 @@ Used for: active nav item, primary buttons, send button, brand accents, unread d
 
 Toggle/status text that reads "On" uses `text-success`.
 
+### Overlays
+
+Any modal, drawer, or sheet that sits above page content uses `bg-backdrop` with an opacity modifier for its scrim — e.g. `bg-backdrop/40`. Used by the mobile sidebar drawer; reuse for future confirm/approve modals (calendar add, DM send approval, contract review) instead of a one-off `bg-black/*`.
+
 ---
 
 ## Typography
@@ -176,8 +186,8 @@ Import both via Google Fonts in `client/index.html` or `@import` in `index.css`.
 ```
 background: bg-surface
 border: 0.5px solid var(--color-border)
-border-radius: 14px (--radius-lg)
-box-shadow: 0 8px 40px rgba(80,20,40,0.10), 0 1.5px 4px rgba(80,20,40,0.06)
+border-radius: 14px (--radius-lg)   → rounded-lg
+box-shadow: --shadow-shell          → shadow-shell
 ```
 
 Panels and cards are always white surfaces. Colour lives inside via badges, dots, and text — never on the card background.

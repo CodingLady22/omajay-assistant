@@ -3,6 +3,7 @@ import { closeDatabaseConnection, connectToDatabase } from "@/db/client";
 import { createStandardIndexes } from "@/db/indexes";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
+import chatRouter from "@/routes/chat";
 
 async function bootstrap(): Promise<void> {
   await connectToDatabase();
@@ -15,6 +16,8 @@ async function bootstrap(): Promise<void> {
   app.get("/health", (_req, res) => {
     res.json({ success: true, data: { status: "ok" } });
   });
+
+  app.use("/api/chat", chatRouter);
 
   app.listen(env.PORT, () => {
     logger.info("index", `Server listening on port ${env.PORT}`);
