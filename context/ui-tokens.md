@@ -83,6 +83,7 @@ className="bg-pink-500 text-gray-600"
 
   /* Shadows */
   --shadow-shell: 0 8px 40px rgba(80, 20, 40, 0.10), 0 1.5px 4px rgba(80, 20, 40, 0.06);
+  --shadow-card-hover: 0 2px 12px rgba(212, 83, 126, 0.10);
 }
 ```
 
@@ -191,6 +192,8 @@ box-shadow: --shadow-shell          → shadow-shell
 ```
 
 Panels and cards are always white surfaces. Colour lives inside via badges, dots, and text — never on the card background.
+
+Clickable cards (trend cards, and any future card-as-button pattern) use `hover:border-pink-mid hover:shadow-card-hover` for their hover state — `shadow-card-hover` → `--shadow-card-hover`.
 
 ### Buttons
 

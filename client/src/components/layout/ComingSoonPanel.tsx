@@ -7,7 +7,7 @@ type Props = {
 
 export function ComingSoonPanel({ icon: Icon, label }: Props) {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 px-[22px] py-[18px] text-center">
+    <div className="flex flex-1 flex-col items-center justify-center gap-3 px-5.5 py-4.5 text-center">
       <Icon size={28} className="text-text-secondary" />
       <div className="text-[13px] font-medium text-text-primary">{label} is coming soon</div>
       <div className="max-w-xs text-[12px] text-text-secondary">

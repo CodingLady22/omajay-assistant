@@ -6,9 +6,10 @@ Update this file after every completed feature. Any AI agent reading this should
 
 ## Current Status
 
-**Phase:** 1 — Foundation
-**Last completed:** 04 Chat Route + Dashboard Shell
-**Next:** 05 WhatsApp Webhook + Send
+**Phase:** 3 — Trends
+**Last completed:** 06 Trends Panel — Full UI (Mock)
+**Next:** 07 YouTube + Instagram Trend Services
+**Deferred:** 05 WhatsApp Webhook + Send — blocked on a WhatsApp Cloud API token from Meta. See Decisions below.
 
 ---
 
@@ -23,11 +24,11 @@ Update this file after every completed feature. Any AI agent reading this should
 
 ### Phase 2 — WhatsApp
 
-- [ ] 05 WhatsApp Webhook + Send
+- [ ] 05 WhatsApp Webhook + Send — **DEFERRED, blocked on Meta token** (see Decisions)
 
 ### Phase 3 — Trends
 
-- [ ] 06 Trends Panel — Full UI (Mock)
+- [x] 06 Trends Panel — Full UI (Mock)
 - [ ] 07 YouTube + Instagram Trend Services
 - [ ] 08 Trends Agent + Scan + Store
 - [ ] 09 Daily Trends Scan (Scheduled)
@@ -95,6 +96,12 @@ _Add decisions here as they are made during implementation._
 - **Feature 04 — added `--shadow-shell` token** (`0 8px 40px rgba(80,20,40,0.10), 0 1.5px 4px rgba(80,20,40,0.06)`) to `index.css`'s `@theme` and `ui-tokens.md`, replacing the arbitrary `shadow-[...]` value in `App.tsx`. Added during the post-review fix pass, same reasoning as the backdrop token: one usage today, but once panels share this shadow the token provides a single place to change it.
 - **Feature 04 — no `cors` package added.** Vite's dev server proxies `/api/*` to the Express server (`vite.config.ts`); production is assumed same-origin. `VITE_API_BASE_URL` is still defined (empty by default) per `code-standards.md`'s frontend env-var rule, for if that assumption changes later.
 - **Feature 04 — `lucide-react` has no Instagram/brand icon.** Used `MessageCircle` for the Instagram DMs nav item instead; revisit if a closer visual match is wanted once the real DMs panel is built (feature 15).
+- **2026-08-03 — Feature 05 (WhatsApp Webhook + Send) deferred, resequenced out of order.** No WhatsApp Cloud API token from Meta is available yet, and WhatsApp is one integration into the graph, not the graph itself — the dashboard is a complete second surface into the same orchestrator, so there's no reason to block the rest of the build on it. Feature 05 is **not cancelled** — it stays in the plan and runs whenever the token arrives, most likely slotted back in before feature 21 (morning briefing) needs it, but could land later too. **The next feature to build is 06 (Trends Panel UI)**, not 05. Do not attempt to build the webhook or `services/whatsapp.ts` send logic until credentials exist — the lazy `getWhatsAppEnv()` getter (already wired since feature 02) means its absence doesn't block boot or any other feature; leave it uncalled/unbuilt rather than stubbing around a missing token. From feature 06 onward, every build-plan "verify on WhatsApp" step is verified via the dashboard chat (`POST /api/chat`, `channel: "web"`) instead — same graph, same orchestrator, just the web door. `build-plan.md` carries a matching note at the top and on feature 05 itself. Feature 21 (morning briefing) will need its own delivery seam so it isn't hard-wired to `sendWhatsApp` before 05 exists — see the note added under feature 21 in `build-plan.md` (not built yet, just recorded).
+- **Feature 06 — trend-card click prefills the chat input rather than auto-sending.** The static design mock's `goChat()` sends the prompt immediately on click; the real app instead navigates to `/` with the prompt pre-filled into the textarea so she can review/edit before sending. Decided during `/architect` — a deliberate divergence from the mock's JS behavior (not its visuals, which are matched exactly).
+- **Feature 06 — mechanism: React Router state, not global/context state.** `TrendCard` calls `navigate('/', { state: { prompt } })`; `ChatPanel` reads `location.state?.prompt` in a mount `useEffect`, sets it into `input`, focuses the textarea, then clears the state via `navigate(location.pathname, { replace: true, state: null })` so a page reload doesn't re-trigger the prefill. No new dependency, no shared store needed for a single one-shot value.
+- **Feature 06 — mock set is 3 Instagram + 3 YouTube (no TikTok).** The design mock's 6 sample cards are 3 IG + 1 YT + 2 TT; the 2 TikTok cards were dropped per project scope and replaced with 2 additional YouTube cards for an even split, since TikTok won't backfill the grid once feature 08 wires real data and both IG/YT will contribute close to evenly.
+- **Feature 06 — added `--shadow-card-hover` token** (`0 2px 12px rgba(212,83,126,0.10)`) to `index.css`'s `@theme` and `ui-tokens.md`, matching the exact hover shadow value from the design mock's `.trend-card:hover` rule. Same reasoning as feature 04's `--shadow-shell`/`--color-backdrop`: tokenize a reusable arbitrary-shadow value once rather than letting future clickable cards (Scripts, Contracts) each hardcode their own.
+- **Feature 06 — mock `Trend` type lives in `client/src/lib/mock-trends.ts`, not yet unified with the server's `trends` schema.** Fine for a client-only mock feature; flagged in `build-plan.md`'s feature 08 entry to consolidate into one shared type when real data is wired in, so a client-mock type and a server type don't drift apart independently.
 
 ---
 
@@ -116,3 +123,9 @@ _Add notes here as the build progresses — workarounds, patterns, anything that
 - Caught and fixed during `/review`: (1) a redundant Google Fonts `@import` in `index.css` — `client/index.html` already loads both fonts via `<link>` tags from feature 01 with more precise weights (Playfair italic-only), so the CSS import was removed; (2) `App.tsx` used a default export, inconsistent with `code-standards.md`'s "named exports only" rule — converted to `export function App` with a matching named import in `main.tsx`.
 - `/imprint` run for the first time this feature — `ui-registry.md` now has its first six entries (Sidebar, Topbar, ComingSoonPanel, MessageBubble, QuickChips, ChatPanel's input row), establishing the active-nav-state triple, the responsive label-hiding class pair, the chat-bubble tail-corner shape, the chip pattern, and the primary-button treatment as reusable baselines.
 - Deferred on purpose: a failed `/api/chat` call renders as a plain AI bubble with no distinct error styling — degrades gracefully (no crash, human-readable text) but isn't visually distinguished from a real reply yet. Left for feature 23 ("Empty States + Error Handling Pass"), which is scheduled to do this consistently across every panel at once rather than one-off now.
+- Feature 06 built: `client/src/lib/mock-trends.ts` (`Trend` type + 6-entry `MOCK_TRENDS`), `client/src/components/trends/TrendCard.tsx`, `client/src/pages/TrendsPage.tsx` (real grid, replacing `ComingSoonPanel`), and a `ChatPanel.tsx` addition (router-state prefill effect).
+- Verified live via headless Playwright (not mocked): screenshotted `/trends` against `glam-ai.html` at all three responsive breakpoints (desktop 3-col, tablet 4-col, mobile 2-col), zero console/page errors at any breakpoint. Scripted a full click-through: clicking a trend card navigates to `/`, the textarea is prefilled with the card's exact prompt text (confirmed both by `inputValue()` and a screenshot), then a page reload confirms the prefill does not resurface (router state correctly cleared, not just visually reset).
+- Server-side round trip was blocked earlier in the session by a transient MongoDB Atlas DNS `ENOTFOUND` on the cluster's SRV record — resolved once the cluster was restarted. Re-verified live end-to-end afterward: clicked a trend card, confirmed the prefill, clicked send, and confirmed a real response came back through the compiled LangGraph (orchestrator correctly classified the GRWM script-outline prompt as `content` intent, routed to the still-stubbed content node, rendered `[content] stub response` in the chat with zero console errors). Feature 06's full click-through-to-response path is confirmed working against the real stack, not just the client-only mock.
+- First-time Playwright setup notes for future sessions needing browser verification: `npx playwright install chromium` downloads a browser matched to whatever `playwright` version `npx` resolves that run — if a later `npx playwright ...` invocation resolves a different cached version, it may need its own `install` before launching (`browserType.launch: Executable doesn't exist` is the tell). Scripts run fastest from inside the npx cache dir that already has `node_modules/playwright` (ESM `import "playwright"` needs real module resolution — `NODE_PATH` does not work for ESM).
+- Caught and fixed during `/review`: `ChatPanel.tsx`'s router-state read used a bare `location.state as { prompt?: string } | null` type assertion with no explanatory comment, violating `code-standards.md`'s "never use `as` unless unavoidable, with a comment" rule. Replaced with an `in`-operator narrowing check (`"prompt" in state && typeof state.prompt === "string"`) that avoids the assertion entirely — `tsc` stays clean.
+- **Follow-up fix (post-review, IDE-flagged):** the narrowing check above was still living inside a `useEffect` that called `setInput(prompt)` synchronously — the `react-hooks` "setState synchronously in an effect" rule caught it, correctly: deriving `input`'s value from `location.state` doesn't need an effect at all, since the prompt is already known at mount. Refactored to a top-level `extractPrompt(state: unknown)` helper used both as `input`'s lazy `useState` initializer (`useState(() => extractPrompt(location.state) ?? "")`) and to seed a `hadPromptRef` boolean. The remaining `useEffect` now only performs genuine side effects gated on that ref — clearing the router state (`navigate(..., { replace: true, state: null })`) and focusing/resizing the textarea — with no `setState` call in its body. Re-verified via Playwright: prefill and post-reload-clear behavior both unchanged.

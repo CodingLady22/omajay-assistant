@@ -54,6 +54,7 @@
 
   /* Shadows */
   --shadow-shell: 0 8px 40px rgba(80, 20, 40, 0.10), 0 1.5px 4px rgba(80, 20, 40, 0.06);
+  --shadow-card-hover: 0 2px 12px rgba(212, 83, 126, 0.10);
 }
 
 body {

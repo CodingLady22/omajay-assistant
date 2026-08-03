@@ -149,3 +149,25 @@ Last updated: 2026-06-25
 
 **Pattern notes:**
 `bg-pink` + white icon/text + `hover:opacity-85` + `rounded-md` is the canonical primary-button treatment per `ui-tokens.md` — reuse it for every other primary action (e.g. a future "Approve & send" DM button) instead of introducing a new button style.
+
+---
+
+### TrendCard
+
+File: client/src/components/trends/TrendCard.tsx
+Last updated: 2026-08-03
+
+| Property         | Class                                                              |
+| ---------------- | ------------------------------------------------------------------- |
+| Background       | card: `bg-surface` · thumbnail block: per-item token (e.g. `bg-pink-light`, `bg-yt-bg`, `bg-success-bg`) |
+| Border            | `border-[0.5px] border-border` default → `hover:border-pink-mid`   |
+| Border radius     | `rounded-lg` (card) · `rounded-full` (platform badge)               |
+| Text — primary    | `text-text-primary` (title, 12px medium)                            |
+| Text — secondary  | `text-text-secondary` (format label, 10px uppercase, `tracking-[0.08em]`) |
+| Spacing           | `px-[11px] py-[9px]` meta padding · `mb-[3px]` / `mb-[5px]` between meta lines |
+| Hover state       | `hover:border-pink-mid hover:shadow-card-hover`                     |
+| Shadow            | none at rest → `shadow-card-hover` on hover                         |
+| Accent usage      | metric line: `text-pink` · platform badge: `bg-ig-bg text-ig` (Instagram) or `bg-yt-bg text-yt` (YouTube), absolute `top-2 right-2` on the thumbnail |
+
+**Pattern notes:**
+This is the canonical "clickable card" pattern — a whole-card `<button>` (not a wrapped div+onClick) with `hover:border-pink-mid hover:shadow-card-hover` as the interactive cue instead of a background-color change, since cards stay white per `ui-tokens.md`. `shadow-card-hover` (`--shadow-card-hover`, added this feature) is now the reusable hover-shadow token — any future clickable card (Scripts, Contracts) should reuse this exact hover pair rather than inventing a new one. The thumbnail block's background token is the one place per-item color varies (decorative, not semantic); the platform badge colors are fixed per platform (`ig`/`yt` tokens) and must never swap, matching `ui-tokens.md`'s "Platform badge colours are fixed" invariant.
