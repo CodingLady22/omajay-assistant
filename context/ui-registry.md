@@ -164,7 +164,7 @@ Last updated: 2026-08-03
 | Border radius     | `rounded-lg` (card) · `rounded-full` (platform badge)               |
 | Text — primary    | `text-text-primary` (title, 12px medium)                            |
 | Text — secondary  | `text-text-secondary` (format label, 10px uppercase, `tracking-[0.08em]`) |
-| Spacing           | `px-[11px] py-[9px]` meta padding · `mb-[3px]` / `mb-[5px]` between meta lines |
+| Spacing           | `px-2.75 py-2.25` meta padding · `mb-0.75` / `mb-1.25` between meta lines |
 | Hover state       | `hover:border-pink-mid hover:shadow-card-hover`                     |
 | Shadow            | none at rest → `shadow-card-hover` on hover                         |
 | Accent usage      | metric line: `text-pink` · platform badge: `bg-ig-bg text-ig` (Instagram) or `bg-yt-bg text-yt` (YouTube), absolute `top-2 right-2` on the thumbnail |

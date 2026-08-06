@@ -26,6 +26,11 @@ function extractPrompt(state: unknown): string | undefined {
     : undefined;
 }
 
+function resizeTextarea(el: HTMLTextAreaElement): void {
+  el.style.height = "";
+  el.style.height = `${Math.min(el.scrollHeight, 90)}px`;
+}
+
 export function ChatPanel() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -49,8 +54,7 @@ export function ChatPanel() {
     const el = textareaRef.current;
     if (el) {
       el.focus();
-      el.style.height = "";
-      el.style.height = `${Math.min(el.scrollHeight, 90)}px`;
+      resizeTextarea(el);
     }
   }, [location.pathname, navigate]);
 
@@ -84,29 +88,28 @@ export function ChatPanel() {
   function handleInput(): void {
     const el = textareaRef.current;
     if (!el) return;
-    el.style.height = "";
-    el.style.height = `${Math.min(el.scrollHeight, 90)}px`;
+    resizeTextarea(el);
   }
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <div ref={messagesRef} className="flex flex-1 flex-col gap-3.5 overflow-y-auto px-5.5 py-4.5">
+      <div ref={messagesRef} className="flex flex-1 flex-col gap-3.5 overflow-y-auto px-[22px] py-[18px]">
         {messages.map((message) => (
           <MessageBubble key={message.id} role={message.role} text={message.text} />
         ))}
         {isTyping && (
           <div className="flex items-start gap-2.5">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-pink-light text-[11px] font-semibold text-pink">
+            <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-pink-light text-[11px] font-semibold text-pink">
               ✦
             </div>
-            <div className="flex items-center gap-0.75 rounded-lg rounded-bl-[4px] bg-surface-secondary px-3.5 py-2.5">
-              <span className="inline-block h-1.25 w-1.25 animate-pulse rounded-full bg-text-secondary" />
+            <div className="flex items-center gap-[3px] rounded-[14px] rounded-bl-[4px] bg-surface-secondary px-3.5 py-2.5">
+              <span className="inline-block h-[5px] w-[5px] animate-pulse rounded-full bg-text-secondary" />
               <span
-                className="inline-block h-1.25 w-1.25 animate-pulse rounded-full bg-text-secondary"
+                className="inline-block h-[5px] w-[5px] animate-pulse rounded-full bg-text-secondary"
                 style={{ animationDelay: "0.2s" }}
               />
               <span
-                className="inline-block h-1.25 w-1.25 animate-pulse rounded-full bg-text-secondary"
+                className="inline-block h-[5px] w-[5px] animate-pulse rounded-full bg-text-secondary"
                 style={{ animationDelay: "0.4s" }}
               />
             </div>
@@ -114,7 +117,7 @@ export function ChatPanel() {
         )}
       </div>
 
-      <div className="border-t border-border px-5.5 py-3">
+      <div className="border-t border-border px-[22px] py-3">
         {showChips && <QuickChips onSelect={(text) => void handleSend(text)} />}
         <div className="flex items-end gap-2">
           <textarea
@@ -125,13 +128,13 @@ export function ChatPanel() {
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={handleKeyDown}
             onInput={handleInput}
-            className="min-h-9 max-h-22.5 flex-1 resize-none rounded-md border border-border bg-surface px-3 py-2 text-[13px] leading-normal text-text-primary outline-none focus:border-pink-mid"
+            className="min-h-[36px] max-h-[90px] flex-1 resize-none rounded-md border border-border bg-surface px-3 py-2 text-[13px] leading-[1.5] text-text-primary outline-none focus:border-pink-mid"
           />
           <button
             type="button"
             onClick={() => void handleSend(input)}
             disabled={isTyping}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-pink text-white transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md bg-pink text-white transition-opacity hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-40"
             aria-label="Send message"
           >
             <ArrowUp size={16} />
