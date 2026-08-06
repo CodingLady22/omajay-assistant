@@ -8,6 +8,8 @@ Because WhatsApp is the primary interface, "testable" sometimes means a WhatsApp
 
 **Mock data throughout.** Every feature is built and tested against placeholder data — sample trends, fake DMs, dummy rate cards and contracts. Real accounts and documents are connected only when the app is ready for production.
 
+**WhatsApp is currently deferred (2026-08-03)** — feature 05 is blocked on a Meta WhatsApp Cloud API token that isn't available yet. It has been resequenced to run later, whenever the token arrives; it is not cancelled or dropped. Until it lands, **every "verify on WhatsApp" step below should be read as "verify via the dashboard chat (`POST /api/chat`)"** — both surfaces run the exact same graph, so this changes nothing about what's being tested, only which door is used to test it. See `progress-tracker.md`'s Decisions section for the full rationale.
+
 **Each feature runs through the engineering loop** (see `AGENTS.md`):
 
 ```
@@ -76,9 +78,11 @@ Set up the project shell.
 
 ## Phase 2 — WhatsApp (Primary Interface)
 
-### 05 WhatsApp Webhook + Send
+### 05 WhatsApp Webhook + Send — **DEFERRED**
 
-**Logic:**
+**Status: blocked on a WhatsApp Cloud API token from Meta (not yet available as of 2026-08-03).** Do not build this until the token arrives — no webhook route, no `services/whatsapp.ts` send logic. Resequenced to run out of order, whenever the token lands; everything after it in this plan (06 onward) proceeds now through the dashboard instead of waiting on it.
+
+**Logic (unchanged from original plan — build this when unblocked):**
 
 - `GET /api/whatsapp` — Meta verification handshake.
 - `POST /api/whatsapp` — verify signature, parse message, run the graph with `channel: "whatsapp"`, send the reply.
@@ -122,6 +126,7 @@ Set up the project shell.
 - On-demand: returns freshest stored trends; triggers a live scan if stored data is stale.
 - `GET /api/trends` — returns stored trends for the dashboard.
 - Wire the dashboard grid to real data.
+- **Consolidate the trend type.** Feature 06 defined a client-only `Trend` type in `client/src/lib/mock-trends.ts` for the mock UI. When wiring real data here, replace it with a single shared type sourced from/aligned with the server's `trends` collection schema (`architecture.md`) rather than letting a client-mock type and a server type drift apart independently.
 
 **Verify:** ask "what's trending?" on WhatsApp and in the dashboard — get real, niche-relevant results.
 
@@ -289,7 +294,9 @@ Set up the project shell.
 - Register in `scheduler.ts`.
 - Log each briefing (and her reply, captured by the normal webhook) to `briefings`.
 
-**Verify:** trigger the job manually; receive a real, accurate briefing on WhatsApp that names today's events and actual unfinished items.
+**Delivery is pluggable (recorded 2026-08-03, given WhatsApp/feature 05 is deferred).** Build the briefing agent itself in full — gathering + composing the text — but keep delivery behind a single seam (e.g. a `deliverBriefing(text)` function `morning-briefing.ts` calls) rather than calling `sendWhatsApp` directly. Until feature 05 lands, that seam sends the briefing to the dashboard/console (e.g. logged + surfaced in the UI or written to `briefings` for the dashboard to display) instead of WhatsApp. Once WhatsApp is built, swap the seam's implementation to `sendWhatsApp` — no change to the agent or the gathering logic. This is a note for when feature 21 is actually built, not something to build now.
+
+**Verify:** trigger the job manually; receive a real, accurate briefing (via the dashboard/console delivery seam, or WhatsApp once 05 is done) that names today's events and actual unfinished items.
 
 ---
 

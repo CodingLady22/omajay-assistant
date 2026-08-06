@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { ArrowUp } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { sendChatMessage } from "@/lib/api";
 import { MessageBubble } from "@/components/chat/MessageBubble";
 import { QuickChips } from "@/components/chat/QuickChips";
@@ -19,18 +20,43 @@ const GREETING: Message = {
     "Ciao Sofia! ✨ I'm your AI assistant. I can check trending looks on Instagram, TikTok & YouTube, write scripts for your posts, manage your calendar, summarise your brand DMs, and send you updates on WhatsApp. What do you need today?",
 };
 
+function extractPrompt(state: unknown): string | undefined {
+  return state && typeof state === "object" && "prompt" in state && typeof state.prompt === "string"
+    ? state.prompt
+    : undefined;
+}
+
+function resizeTextarea(el: HTMLTextAreaElement): void {
+  el.style.height = "";
+  el.style.height = `${Math.min(el.scrollHeight, 90)}px`;
+}
+
 export function ChatPanel() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [messages, setMessages] = useState<Message[]>([GREETING]);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(() => extractPrompt(location.state) ?? "");
   const [isTyping, setIsTyping] = useState(false);
   const [showChips, setShowChips] = useState(true);
   const messagesRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const hadPromptRef = useRef(extractPrompt(location.state) !== undefined);
 
   useEffect(() => {
     const el = messagesRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, isTyping]);
+
+  useEffect(() => {
+    if (!hadPromptRef.current) return;
+
+    navigate(location.pathname, { replace: true, state: null });
+    const el = textareaRef.current;
+    if (el) {
+      el.focus();
+      resizeTextarea(el);
+    }
+  }, [location.pathname, navigate]);
 
   async function handleSend(text: string): Promise<void> {
     const trimmed = text.trim();
@@ -62,8 +88,7 @@ export function ChatPanel() {
   function handleInput(): void {
     const el = textareaRef.current;
     if (!el) return;
-    el.style.height = "";
-    el.style.height = `${Math.min(el.scrollHeight, 90)}px`;
+    resizeTextarea(el);
   }
 
   return (
