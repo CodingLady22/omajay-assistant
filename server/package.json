@@ -7,6 +7,7 @@
     "db:seed": "tsx src/db/run-seed.ts",
     "db:setup-search-index": "tsx src/db/run-setup-search-index.ts",
     "graph:test": "tsx src/agents/run-graph-test.ts",
+    "trends:test": "tsx src/services/run-trends-test.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
