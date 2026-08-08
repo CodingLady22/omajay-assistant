@@ -27,6 +27,33 @@ export type Trend = {
   scanned_at: Date;
 };
 
+// Raw per-platform shapes returned by services/*.ts — feature 08 maps these
+// into the `Trend` DB shape above (see build-plan.md's feature 08 note).
+export type YouTubeTrend = {
+  externalId: string;
+  title: string;
+  url: string;
+  thumbnail: string;
+  publishedAt: string;
+  viewCount: number;
+};
+
+export type InstagramTrend = {
+  externalId: string;
+  title: string;
+  url: string;
+  thumbnail: string;
+  likeCount: number;
+};
+
+export type TikTokTrend = {
+  externalId: string;
+  title: string;
+  url: string;
+  thumbnail: string;
+  viewCount: number;
+};
+
 export type ScriptBody = {
   hook: string;
   body: string;

@@ -7,9 +7,9 @@ Update this file after every completed feature. Any AI agent reading this should
 ## Current Status
 
 **Phase:** 3 — Trends
-**Last completed:** 06 Trends Panel — Full UI (Mock)
-**Next:** 07 YouTube + Instagram Trend Services
-**Deferred:** 05 WhatsApp Webhook + Send — blocked on a WhatsApp Cloud API token from Meta. See Decisions below.
+**Last completed:** 07 YouTube + Instagram Trend Services
+**Next:** 08 Trends Agent + Scan + Store
+**Deferred:** 05 WhatsApp Webhook + Send — blocked on a WhatsApp Cloud API token from Meta. Instagram's real implementation within 07 (`services/instagram.ts`) — blocked on `INSTAGRAM_TOKEN`/`INSTAGRAM_ACCOUNT_ID`, currently a `[]` stub. See Decisions below.
 
 ---
 
@@ -29,7 +29,7 @@ Update this file after every completed feature. Any AI agent reading this should
 ### Phase 3 — Trends
 
 - [x] 06 Trends Panel — Full UI (Mock)
-- [ ] 07 YouTube + Instagram Trend Services
+- [x] 07 YouTube + Instagram Trend Services — Instagram shipped as a `[]` stub (see Decisions)
 - [ ] 08 Trends Agent + Scan + Store
 - [ ] 09 Daily Trends Scan (Scheduled)
 
@@ -102,6 +102,11 @@ _Add decisions here as they are made during implementation._
 - **Feature 06 — mock set is 3 Instagram + 3 YouTube (no TikTok).** The design mock's 6 sample cards are 3 IG + 1 YT + 2 TT; the 2 TikTok cards were dropped per project scope and replaced with 2 additional YouTube cards for an even split, since TikTok won't backfill the grid once feature 08 wires real data and both IG/YT will contribute close to evenly.
 - **Feature 06 — added `--shadow-card-hover` token** (`0 2px 12px rgba(212,83,126,0.10)`) to `index.css`'s `@theme` and `ui-tokens.md`, matching the exact hover shadow value from the design mock's `.trend-card:hover` rule. Same reasoning as feature 04's `--shadow-shell`/`--color-backdrop`: tokenize a reusable arbitrary-shadow value once rather than letting future clickable cards (Scripts, Contracts) each hardcode their own.
 - **Feature 06 — mock `Trend` type lives in `client/src/lib/mock-trends.ts`, not yet unified with the server's `trends` schema.** Fine for a client-only mock feature; flagged in `build-plan.md`'s feature 08 entry to consolidate into one shared type when real data is wired in, so a client-mock type and a server type don't drift apart independently.
+- **2026-08-08 — Feature 07 (YouTube + Instagram Trend Services) built with Instagram deferred to a stub, not left unbuilt.** Only `YOUTUBE_API_KEY` is available so far; `INSTAGRAM_TOKEN`/`INSTAGRAM_ACCOUNT_ID` are not. Rather than repeating the feature-05 "don't build the file at all" treatment, `services/instagram.ts` ships now as a `fetchHashtagTopPosts(hashtag)` stub returning `[]` — mirroring `services/tiktok.ts`'s existing permanent-stub shape. Reasoning (from `/architect`, confirmed by the developer): feature 08's trends-agent needs to loop over YouTube/Instagram/TikTok and merge their results; a same-shaped stub lets that loop be written once, uniformly, today — swapping in the real Graph API call later is a one-file change inside `instagram.ts`, zero agent changes. This is a deliberate divergence from the feature-05 pattern (there, the whole feature was blocked and the file simply wasn't written) because feature 07 bundles three services feature 08 depends on jointly, where feature 05 was a single, standalone integration.
+- **Feature 07 — services take the search topic as a parameter, never hardcode it.** `fetchTrendingVideos(query: string = "makeup tutorial")` (youtube.ts, tiktok.ts stub) and `fetchHashtagTopPosts(hashtag: string = "makeup")` (instagram.ts stub) all accept the topic as an argument with a generic default used only when no topic is passed. Deciding *what* topic to search (parsing "bridal makeup" etc. out of her message) is explicitly feature 08's job (the trends-agent), not this feature's — services only execute a given query. `tiktok.ts`'s stub was updated to accept the same `query` parameter (currently unused) purely so the trends-agent can call all three services with one uniform signature, no special-casing.
+- **Feature 07 — YouTube service validates the API response shape with zod**, not raw `JSON` + type assertions — same "never trust raw output, always validate" posture `code-standards.md` already requires for LLM structured output, applied here to an external HTTP API instead.
+- **Feature 07 — raw per-platform types (`YouTubeTrend`, `InstagramTrend`, `TikTokTrend`) added to `server/src/types/index.ts`**, distinct from the DB `Trend` type. Feature 08 maps these into `Trend` when it scores and stores results — see the updated feature 08 entry in `build-plan.md`.
+- **Feature 07 — verify script:** `npm run trends:test` (`server/src/services/run-trends-test.ts`) calls `fetchTrendingVideos("bridal makeup")` against the real YouTube API and both stubs with a topic argument, logging counts — proves the parameterization works end-to-end, not just the hardcoded default.
 
 ---
 

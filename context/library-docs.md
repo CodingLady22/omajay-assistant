@@ -228,11 +228,13 @@ export async function fetchRecentDms(): Promise<RawDm[]> {
 ### Trending posts (hashtag)
 
 ```typescript
-export async function fetchHashtagTopPosts(hashtag: string): Promise<RawPost[]> {
+export async function fetchHashtagTopPosts(hashtag: string = DEFAULT_HASHTAG): Promise<InstagramTrend[]> {
   // 1. GET /ig_hashtag_search?user_id=...&q={hashtag} → hashtag id
   // 2. GET /{hashtag-id}/top_media?user_id=... → top posts
 }
 ```
+
+**Status (feature 07, 2026-08-08): stubbed, returns `[]`.** Real implementation is blocked on `INSTAGRAM_TOKEN` / `INSTAGRAM_ACCOUNT_ID` not being available yet — same deferral pattern as feature 05 (WhatsApp), see `progress-tracker.md`. Stubbed like `tiktok.ts` rather than left unbuilt, so the trends-agent (feature 08) can loop over YouTube/Instagram/TikTok identically from day one; swapping in the real call is a one-file change here, no agent changes. `hashtag` already accepts the topic to search — the trends-agent decides *what* topic, this service just executes the search for it (same split as `youtube.ts`).
 
 **Rules:**
 
@@ -240,6 +242,7 @@ export async function fetchHashtagTopPosts(hashtag: string): Promise<RawPost[]> 
 - Cache fetched DMs in the `dms` collection with `ig_thread_id` as the upsert key.
 - Hashtag insights need a Business account — handle the permission-denied case gracefully.
 - Token from `INSTAGRAM_TOKEN`, account id from `INSTAGRAM_ACCOUNT_ID` — env only.
+- `fetchHashtagTopPosts` never hardcodes the hashtag — it's a required-with-default parameter so the trends-agent can pass whatever topic she asked about (e.g. "bridal makeup"). The default only applies when no topic is given.
 
 ---
 
@@ -249,8 +252,8 @@ export async function fetchHashtagTopPosts(hashtag: string): Promise<RawPost[]> 
 
 ```typescript
 // server/services/youtube.ts
-export async function fetchTrendingMakeupVideos(): Promise<YouTubeTrend[]> {
-  // GET /search?part=snippet&q=makeup tutorial&type=video&order=viewCount
+export async function fetchTrendingVideos(query: string = DEFAULT_QUERY): Promise<YouTubeTrend[]> {
+  // GET /search?part=snippet&q={query}&type=video&order=viewCount
   //   &publishedAfter={7 days ago}&maxResults=10&key={YOUTUBE_API_KEY}
   // then GET /videos?part=statistics&id=... for view counts
 }
@@ -258,10 +261,12 @@ export async function fetchTrendingMakeupVideos(): Promise<YouTubeTrend[]> {
 
 **Rules:**
 
+- `query` is a parameter, never hardcoded — `DEFAULT_QUERY` ("makeup tutorial") only applies when no topic is passed. Deciding the topic from her message is the trends-agent's job (feature 08); executing the search for a given topic is this service's job (feature 07).
 - Use `order=viewCount` and a recent `publishedAfter` window for "trending".
 - Two calls: search for ids, then `videos` for statistics — batch the ids.
 - Key from `YOUTUBE_API_KEY` — env only.
 - Mind quota — the daily scan should be efficient (one search + one stats call).
+- Response shapes are validated with zod (not trusted raw JSON) — same "never trust raw output" posture as LLM structured output.
 
 ---
 
@@ -271,7 +276,7 @@ TikTok is out of scope until the client has Research API access.
 
 ```typescript
 // server/services/tiktok.ts
-export async function fetchTrendingTikToks(): Promise<TikTokTrend[]> {
+export async function fetchTrendingVideos(query: string = DEFAULT_QUERY): Promise<TikTokTrend[]> {
   return []; // until API access — never fabricate data
 }
 ```
@@ -279,6 +284,7 @@ export async function fetchTrendingTikToks(): Promise<TikTokTrend[]> {
 **Rules:**
 
 - Always returns `[]`. The trends agent must handle an empty TikTok result as normal.
+- Takes the same `query` parameter shape as `youtube.ts`/`instagram.ts` (currently unused) so the trends-agent can call all three services uniformly — no special-casing TikTok in the loop.
 - When access arrives, implement here only — no other file should need changing.
 
 ---

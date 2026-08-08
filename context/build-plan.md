@@ -110,11 +110,11 @@ Set up the project shell.
 
 **Logic:**
 
-- `server/services/youtube.ts` — trending makeup videos (search by viewCount + recent window, then stats).
-- `server/services/instagram.ts` — hashtag top posts for her niche tags.
-- `server/services/tiktok.ts` — stub returning `[]`.
+- `server/services/youtube.ts` — `fetchTrendingVideos(query)` — trending videos for a given topic (search by viewCount + recent window, then stats). `query` is a parameter, not hardcoded — defaults to a general makeup term only when no topic is passed; the trends-agent (feature 08) decides the topic, this service just executes the search.
+- `server/services/instagram.ts` — `fetchHashtagTopPosts(hashtag)` — **stubbed, returns `[]`** (2026-08-08). Real implementation is blocked on `INSTAGRAM_TOKEN` / `INSTAGRAM_ACCOUNT_ID`, not available yet — deferred the same way feature 05 (WhatsApp) was, see `progress-tracker.md`. Stubbed like `tiktok.ts` rather than left unbuilt, so feature 08's trends-agent can loop over all three services identically today; swapping in the real Graph API call later is a one-file change here, no agent changes.
+- `server/services/tiktok.ts` — `fetchTrendingVideos(query)` — stub returning `[]`, out of scope until TikTok API access. Takes the same `query` shape as `youtube.ts` (currently unused) so all three services share one call signature.
 
-**Verify:** a script prints real trending items from YouTube and Instagram.
+**Verify:** a script prints real trending items from YouTube for a given topic, and confirms the Instagram and TikTok stubs both return `[]`. Instagram's real verify step (real data, not just `[]`) happens once its token arrives and the stub is replaced.
 
 ---
 
@@ -122,7 +122,7 @@ Set up the project shell.
 
 **Logic:**
 
-- `server/agents/trends-agent.ts` — pulls from the services, the LLM scores each item 0-100 for niche relevance, upserts top results into `trends` (dedupe on `external_id`).
+- `server/agents/trends-agent.ts` — decides the topic/query from her message (feature 07's services just execute a given query — this is where the topic gets picked), calls `fetchTrendingVideos`/`fetchHashtagTopPosts` from all three services, maps their raw `YouTubeTrend` / `InstagramTrend` / `TikTokTrend` shapes (`server/types/index.ts`) into the DB `Trend` shape, the LLM scores each item 0-100 for niche relevance, upserts top results into `trends` (dedupe on `external_id`).
 - On-demand: returns freshest stored trends; triggers a live scan if stored data is stale.
 - `GET /api/trends` — returns stored trends for the dashboard.
 - Wire the dashboard grid to real data.
