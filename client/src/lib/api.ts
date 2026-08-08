@@ -1,3 +1,5 @@
+import type { Trend } from "@/lib/types";
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
 export type ApiResponse<T> = { success: true; data: T } | { success: false; error: string };
@@ -22,4 +24,8 @@ export async function sendChatMessage(text: string): Promise<ApiResponse<{ respo
     method: "POST",
     body: JSON.stringify({ text }),
   });
+}
+
+export async function getTrends(): Promise<ApiResponse<Trend[]>> {
+  return request("/api/trends");
 }
