@@ -146,7 +146,7 @@ function buildTrendsSummary(trends: Trend[]): string {
   return `Here's what's trending right now:\n${lines.join("\n")}`;
 }
 
-export async function getStoredTrends(limit = TOP_N): Promise<Trend[]> {
+export async function getStoredTrends(limit: number = TOP_N): Promise<Trend[]> {
   return collections.trends().find({}).sort({ relevance: -1, metric_value: -1 }).limit(limit).toArray();
 }
 
