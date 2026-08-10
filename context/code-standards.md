@@ -284,7 +284,7 @@ Approved dependencies:
 - `mongodb` — database + GridFS + Atlas Vector Search
 - `zod` — validation
 - `pdf-lib` — contract PDFs
-- `node-cron` — scheduling
+- `node-cron` — scheduling (added feature 09)
 - `googleapis` — Google Calendar
 - `axios` or native `fetch` — HTTP to WhatsApp / Instagram / YouTube
 - React, Vite, Tailwind v4 — frontend

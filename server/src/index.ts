@@ -1,6 +1,7 @@
 import express from "express";
 import { closeDatabaseConnection, connectToDatabase } from "@/db/client";
 import { createStandardIndexes } from "@/db/indexes";
+import { registerJobs } from "@/jobs/scheduler";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import chatRouter from "@/routes/chat";
@@ -9,6 +10,7 @@ import trendsRouter from "@/routes/trends";
 async function bootstrap(): Promise<void> {
   await connectToDatabase();
   await createStandardIndexes();
+  await registerJobs();
 
   const app = express();
 
