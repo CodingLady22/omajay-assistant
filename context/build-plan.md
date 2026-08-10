@@ -136,7 +136,8 @@ Set up the project shell.
 
 **Logic:**
 
-- `server/jobs/daily-trends.ts` — runs the scan and stores results.
+- `server/jobs/daily-trends.ts` — runs the scan and stores results by calling `scanAndStoreTrends()` (exported from `agents/trends-agent.ts`, feature 08) directly — reuse it rather than duplicating scan logic.
+- **`scanAndStoreTrends()` has no try/catch of its own** — feature 08 only wraps it via `trendsAgent()`'s try/catch, which this job doesn't go through. Per `library-docs.md`'s node-cron rules ("each job wraps its work in try/catch — a failed job never crashes the server"), `daily-trends.ts` must wrap its own call to `scanAndStoreTrends()`, logging and swallowing any failure rather than letting it propagate.
 - Registered in `server/jobs/scheduler.ts` with node-cron at early morning, profile timezone.
 
 **Verify:** trigger the job manually; confirm `trends` is freshly populated.

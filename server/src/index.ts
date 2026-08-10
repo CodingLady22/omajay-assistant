@@ -4,6 +4,7 @@ import { createStandardIndexes } from "@/db/indexes";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import chatRouter from "@/routes/chat";
+import trendsRouter from "@/routes/trends";
 
 async function bootstrap(): Promise<void> {
   await connectToDatabase();
@@ -18,6 +19,7 @@ async function bootstrap(): Promise<void> {
   });
 
   app.use("/api/chat", chatRouter);
+  app.use("/api/trends", trendsRouter);
 
   app.listen(env.PORT, () => {
     logger.info("index", `Server listening on port ${env.PORT}`);

