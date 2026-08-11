@@ -11,7 +11,7 @@ import type { InstagramTrend, Profile, TikTokTrend, Trend, YouTubeTrend } from "
 
 const STALE_MS = 24 * 60 * 60 * 1000;
 const TOP_N = 12;
-const DEFAULT_TOPIC = "makeup";
+export const DEFAULT_TOPIC = "makeup";
 const FALLBACK_RELEVANCE = 50;
 const FALLBACK_SUMMARY = "Potentially relevant to your niche — scoring unavailable right now.";
 
@@ -23,7 +23,7 @@ If the message names a specific topic, style, look, or theme (e.g. "bridal makeu
 If the message is a generic request with no specific topic (e.g. "what's trending?", "what's trending this week?", "any trends?"), respond with exactly NONE.
 Respond with only the topic or NONE — no punctuation, no explanation.`;
 
-async function getProfile(): Promise<Profile | null> {
+export async function getProfile(): Promise<Profile | null> {
   return collections.profile().findOne({});
 }
 
