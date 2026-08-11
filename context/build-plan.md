@@ -291,6 +291,7 @@ Set up the project shell.
 **Logic:**
 
 - `server/agents/briefing-agent.ts` — gathers today's events, unfinished script drafts, unsent contracts, and unreplied brand DMs; the LLM composes a short briefing that asks the plan for the day and reminds about unfinished projects.
+- **Move `getProfile()` out of `agents/trends-agent.ts`.** Deferred from feature 09's `/review` (recorded in `progress-tracker.md`): `getProfile()` is generic profile-fetch logic that only lives in `trends-agent.ts` because that's where it was first needed. This feature makes it a third consumer (after `trends-agent.ts` itself and `jobs/scheduler.ts`) — move it into a small shared accessor (e.g. `db/profile.ts`) and update all three call sites, rather than adding a fourth reach-into-trends-agent import.
 - `server/jobs/morning-briefing.ts` — runs the agent and sends via WhatsApp at `profile.briefing_time`.
 - Register in `scheduler.ts`.
 - Log each briefing (and her reply, captured by the normal webhook) to `briefings`.

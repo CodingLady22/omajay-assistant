@@ -1,47 +1,48 @@
-# Memory — Feature 08: Trends Agent + Scan + Store
+# Memory — Feature 09: Daily Trends Scan (Scheduled)
 
-Last updated: 2026-08-09
+Last updated: 2026-08-11
 
 ## What was built
 
-**Feature 08, built, reviewed, fixed, verified.** Branch `trandsAgent`, off `main` (post-feature-07). Not yet merged — see Current state for the unusual commit situation.
+**Feature 09, built, reviewed (two passes), fixed, verified.** Branch `dailyScan`, off `main` (post-feature-08 merge, PR #8). Repo has the same auto-commit pattern seen in feature 08's session: commit `d91f6b7` ("feat: add scanner for daily trends") captured the first-pass diff; the `/review` Layer 3 fix (`scheduler.ts`'s `resolveTimezone()`) plus doc updates sit as uncommitted changes on top. The developer said they'll commit this themselves.
 
-- `server/src/agents/trends-agent.ts` — real implementation, replacing the stub: `extractTopic()` (LLM-parsed topic from her message, falls back to `profile.niche`), `formatCount()`, `mapYouTube`/`mapInstagram`/`mapTikTok` (raw service shapes → DB `Trend` shape), `scoreRelevance()` (one batched Gemini call scoring all candidates 0-100 + summary, zod-validated, graceful fallback to `relevance: 50` on failure), `isStale()` (24h window), `buildTrendsSummary()` (top-5, WhatsApp-friendly text), `getStoredTrends(limit: number = 12)`, `scanAndStoreTrends(topic, profile)` (calls all 3 services, scores, upserts top 12 dedup on `external_id`), `trendsAgent()` (the graph node — checks staleness, scans if needed, returns summary).
-- `server/src/routes/trends.ts` — `GET /api/trends`, calls `getStoredTrends()`, mounted in `index.ts`.
-- `server/src/lib/utils.ts` — added `extractJson()` (strips a ```json fence before `JSON.parse`), fulfilling a pattern `library-docs.md` already documented but nothing had implemented yet.
-- Client: `client/src/lib/types.ts` (new — shared `Trend`/`TrendPlatform`, mirrors the server DB shape as it arrives over JSON), `client/src/lib/api.ts` (`getTrends()` added), `client/src/lib/mock-trends.ts` (deleted — real data replaces it), `TrendCard.tsx` (real `<img>` thumbnail with per-platform fallback block, platform-name-only label instead of "Instagram · Reel", client-built click-to-chat prompt from the title, `line-clamp-2` on the title), `TrendsPage.tsx` (fetches on mount, loading/empty/error states, empty-state CTA chip reusing the click-to-chat pattern).
-- `context/ui-registry.md` — `TrendCard` entry updated (not duplicated) for the real-thumbnail treatment and the new `line-clamp-2` pattern.
-- `context/progress-tracker.md` / `context/build-plan.md` — feature 08 ticked; Decisions section has 8 new entries; feature 09's build-plan entry now carries a note that `scanAndStoreTrends()` needs its own try/catch when the cron job calls it directly.
-- `server/.gitignore` — added `tsconfig.tsbuildinfo`; the already-tracked file was untracked via `git rm --cached` (was previously polluting every diff).
+- `server/src/jobs/daily-trends.ts` — new. `runDailyTrendsScan()`: fetches profile, derives topic (`profile?.niche ?? DEFAULT_TOPIC`), calls `scanAndStoreTrends()` inside its own try/catch (never throws), logs success/failure.
+- `server/src/jobs/scheduler.ts` — new. `registerJobs()`: resolves the cron timezone via `resolveTimezone()` (wraps `getProfile()` in try/catch, falls back to `"UTC"` on either a missing profile or a thrown error — the post-review fix), registers `SCAN_CRON = "0 6 * * *"` (named constant, with a comment on the feature-21 timing dependency and the future `profile.scan_time` idea) via `node-cron`.
+- `server/src/jobs/run-daily-trends-test.ts` — new. `npm run jobs:test`: connects to Mongo, runs the scan once, closes the connection — matches the `graph:test`/`trends:test` pattern.
+- `server/src/agents/trends-agent.ts` — `getProfile()` and `DEFAULT_TOPIC` changed from private to exported, so the job can reuse them instead of duplicating profile-fetch/fallback logic.
+- `server/src/index.ts` — `registerJobs()` wired into `bootstrap()`, after DB connect + index setup, before `app.listen`.
+- `server/package.json` — added `node-cron` (dependencies) + `@types/node-cron` (devDependencies, matching the `@types/express` pattern); added `jobs:test` script.
+- `context/code-standards.md` — `node-cron` marked as added (feature 09) in the approved dependency list.
+- `context/progress-tracker.md` — feature 09 ticked, phase advanced to 4 (Content), 7 new Decisions entries (topic fallback, timezone source, `SCAN_CRON` constant, the 6am-before-8am timing dependency, the try/catch fix, the deferred `getProfile()` relocation plan, node-cron dependency), 2 new Notes entries (what was built + live verification).
+- `context/build-plan.md` — feature 21's entry now carries a note to move `getProfile()` out of `trends-agent.ts` into a shared accessor when the briefing agent becomes its third consumer.
 
 ## Decisions made
 
-- **Topic extraction is a second, separate LLM call** from the orchestrator's intent classification — own closed-ended prompt (topic or `NONE`), falls back to `profile.niche`.
-- **Relevance scoring: one batched LLM call per scan**, not per-item — zod-validated JSON array, graceful fallback (`relevance: 50` + generic summary) on any failure.
-- **Staleness window: 24h**, checked only on the chat/agent path. `GET /api/trends` never triggers a scan — read-only, side-effect-free.
-- **Top 12 candidates stored = top 12 returned** — no separate display cap. Currently YouTube-only in practice (Instagram/TikTok still stubbed to `[]`).
-- **`routes/trends.ts` calls `getStoredTrends()` from `agents/trends-agent.ts`, not a `services/` file.** Deliberate — confirmed during `/architect` — so feature 09's cron can reuse `scanAndStoreTrends()` from the same module without duplicating scan logic or scattering raw `collections.trends()` reads. Recorded in `progress-tracker.md` so a future `/review` doesn't re-flag it as a boundary violation.
-- **Real thumbnail images replace the mock's emoji block**; colored block kept only as a fallback for a missing `thumbnail`. Sub-format label dropped to platform-name-only — confirmed safe against the design's `.trend-platform` CSS (plain single-line text).
-- **`line-clamp-2` added to the card title** — raw YouTube titles are long/hashtag-heavy, unlike the mock's curated short titles; kept card row heights even. Flagged in `ui-registry.md` as the reusable answer for any future card showing unbounded external text (Scripts, Contracts will likely need it too).
+- **Scheduled scan topic = `profile?.niche ?? DEFAULT_TOPIC`** — no chat message exists for a cron-triggered scan, so it reuses `trendsAgent()`'s existing generic-ask fallback rather than inventing new logic.
+- **Cron timezone = `profile.timezone`, read once at server boot inside `registerJobs()`**, wrapped in `resolveTimezone()` which falls back to `"UTC"` on *any* failure (missing profile OR a thrown DB error) — this was the `/review` fix, see Problems solved.
+- **`SCAN_CRON` is a named constant in `scheduler.ts`, not inline** — tunable in one place; a future `profile.scan_time` field could formalize it later, same pattern as `profile.briefing_time`.
+- **Timing dependency recorded, not enforced in code:** the 6 AM scan must run before the 8 AM morning briefing (feature 21) so the briefing reads fresh trends. Documented at `SCAN_CRON`'s definition and in `progress-tracker.md` so the two times stay coordinated if either changes.
+- **`getProfile()` stays in `trends-agent.ts` for now** — only two consumers (itself + `scheduler.ts`), moving it would be refactoring ahead of need. Plan to relocate to a shared accessor (e.g. `db/profile.ts`) is recorded for when feature 21 adds a third consumer.
 
 ## Problems solved
 
-- **`/review` finding (fixed):** `getStoredTrends(limit = TOP_N)` was missing an explicit parameter type annotation, inconsistent with feature 07's service functions which type explicitly even with a default. Fixed to `limit: number = TOP_N`.
-- **`/review` note (not a defect, recorded):** `scanAndStoreTrends()` has no try/catch of its own — safe today only because `trendsAgent()` wraps it. Feature 09's cron job will call it directly, so that job must wrap it per `library-docs.md`'s node-cron rules. Added as an explicit note on feature 09's `build-plan.md` entry so it isn't missed.
-- **DB delete blocked by the permission classifier:** attempted a direct `db.collection('trends').deleteMany({})` via a node script to force a staleness test — blocked as a destructive direct-DB action outside normal app paths. Did not try to route around it; verified topic extraction in isolation instead (a throwaway `dev-test-topic-extraction.ts` script calling the LLM directly, deleted after use) rather than mutating real data.
-- **Playwright tooling (same pattern as feature 06):** `npx playwright` resolves to a cached version; scripts must run from inside that npx cache dir (`node_modules/playwright` present) for ESM `import "playwright"` to resolve.
-- **Unexpected auto-commit discovered:** a commit `c9fae69 "feat: Create trends agent"` appeared at HEAD on branch `trandsAgent`, containing almost all of this feature's diff — but no `git commit` was ever run this session. Author matches the configured local git identity (Maye Jesuorobo), so this is very likely an automatic checkpoint/commit feature in the VS Code extension environment, not anything external or concerning. Nothing was lost — the auto-commit captured an earlier snapshot (before the `/review` fixes), and the fixes (typing fix, doc updates, `.gitignore`, untracking `tsconfig.tsbuildinfo`) are sitting as normal uncommitted changes on top of it. Flagged to the developer; not committed further by me.
+- **`/review` Layer 3 finding (fixed):** `registerJobs()` originally called `getProfile()` unguarded — a thrown error (not just a missing profile) would propagate through `bootstrap()` to `index.ts`'s top-level catch and `process.exit(1)`, crashing the *entire server* over a timezone lookup. Fixed by extracting `resolveTimezone()` with its own try/catch, falling back to `"UTC"` on any failure. Re-verified live: normal boot still resolves the real `Europe/Rome` from the seeded profile.
+- **`/review` Layer 2 finding (deferred, plan recorded):** `getProfile()` lives in a trends-named file but is generic profile-fetch logic; `scheduler.ts` reaching into `trends-agent.ts` for it is a minor coupling smell. Not fixed now (two consumers only) — plan recorded in `progress-tracker.md` and `build-plan.md`'s feature 21 entry.
+- **`npm run dev` background verification twice got stuck with no boot logs** — root cause both times was a *previous* backgrounded dev-server process not being fully killed by `TaskStop` (tsx watch's child `node.exe` survived), leaving port 3001 occupied so the new instance hung silently. Fixed each time by `netstat -ano | grep :3001` to find the PID, then `Stop-Process -Id <pid> -Force` via PowerShell. Worth remembering: always verify the port is actually free after `TaskStop` on a `tsx watch` process, don't assume it worked.
+- **Auto-commit reappeared** (same VS Code-extension checkpointing behavior noted in feature 08's session) — `d91f6b7` captured the pre-review-fix state. Not concerning, same as last time; developer is committing manually this session so no action needed from me.
 
 ## Current state
 
-- **Feature 08 complete, reviewed, fixed, merged.** Type-checks clean (`tsc -b --noEmit`, both `client/` and `server/`), `eslint` clean on `client/`. Verified live end-to-end against the real stack: real YouTube search, real batched Gemini relevance scoring, real upserts, real staleness gate (no re-scan within 24h, confirmed via identical `scanned_at`), real topic extraction (specific topics extracted correctly, generic asks fall through to niche default). Dashboard `/trends` screenshotted via Playwright at all three breakpoints against real data — zero console errors; click-through-to-chat prefill confirmed with the real title-based prompt.
-- **Repo state resolved.** Branch `trandsAgent` (with the earlier auto-commit + the `/review`-fix changes on top) was merged into `main` via PR #8 (`2f7941c`, on top of `8a6ff45` "fix: resolve issues found with cofe-review skill" and `c9fae69` "feat: Create trends agent"). Working tree is clean. Now on a fresh branch, `dailyScan`, for feature 09.
+- **Feature 09 complete, reviewed (2 passes), fixed, verified.** `tsc -b --noEmit` clean on `server/`. Verified live against the real stack: `npm run jobs:test` stored 10 freshly-scored trends using the seeded profile's niche as the topic; full `npm run dev` boot (post-fix) logged `jobs/scheduler Daily trends scan registered — 0 6 * * * (Europe/Rome)` and served `/health` normally.
+- **Repo state:** branch `dailyScan`, commit `d91f6b7` at HEAD (auto-commit, pre-review-fix), plus uncommitted changes on top: `context/build-plan.md`, `context/progress-tracker.md`, `server/src/jobs/scheduler.ts` (the `resolveTimezone()` fix). Full feature-09 `server/src/` diff from branch point (`2f7941c`) to current working tree: `server/src/agents/trends-agent.ts`, `server/src/index.ts`, `server/src/jobs/daily-trends.ts`, `server/src/jobs/run-daily-trends-test.ts`, `server/src/jobs/scheduler.ts` — 5 files, +63/-2. **Developer is committing this themselves** — no commit was made by me.
+- Background dev-server processes were spun up twice this session for boot verification and explicitly stopped + force-killed afterward; port 3001 confirmed free at end of session.
 
 ## Next session starts with
 
-**Feature 09 — Daily Trends Scan (Scheduled)**: `server/jobs/daily-trends.ts` (calls `scanAndStoreTrends()` directly, must wrap it in its own try/catch — see `build-plan.md`'s updated feature 09 entry) and `server/jobs/scheduler.ts` (node-cron registration, early morning, `profile.timezone`). Run `/architect` first per the project's loop.
+Confirm the commit is in and the repo is clean, then proceed to **Feature 10 — Scripts Panel — Full UI (Mock)**: scripts library UI matching the design (draft cards with kind badge, structured body, action chips), mock Reel script + caption cards, no backend yet. Run `/architect` first per the project's loop.
 
 ## Open questions
 
-- Whether `YOUTUBE_API_KEY` quota usage from live verification in the feature 08 session (several real searches) is a concern — informational only, no action taken.
+- Whether the recurring VS Code-extension auto-commit behavior is expected/desired — flagged twice now (features 08 and 09), still no developer decision recorded on whether to look into/disable it.
+- Whether `YOUTUBE_API_KEY` quota usage from repeated live verification runs (feature 08 + feature 09 sessions) is a concern — informational only, no action taken.
 - `@langchain/google` still pre-1.0 — flagged previously for a stability re-check during the pre-production multi-provider hardening pass. Still no action needed yet.

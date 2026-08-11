@@ -11,13 +11,21 @@ import { logger } from "@/lib/logger";
 const SCAN_CRON = "0 6 * * *";
 const DEFAULT_TIMEZONE = "UTC";
 
-export async function registerJobs(): Promise<void> {
-  const profile = await getProfile();
-  const timezone = profile?.timezone;
-  if (!timezone) {
+async function resolveTimezone(): Promise<string> {
+  try {
+    const profile = await getProfile();
+    if (profile?.timezone) return profile.timezone;
     logger.warn("jobs/scheduler", `No profile timezone found — defaulting to ${DEFAULT_TIMEZONE}`);
+    return DEFAULT_TIMEZONE;
+  } catch (error) {
+    logger.error("jobs/scheduler", `Profile timezone lookup failed — defaulting to ${DEFAULT_TIMEZONE}`, error);
+    return DEFAULT_TIMEZONE;
   }
+}
 
-  cron.schedule(SCAN_CRON, runDailyTrendsScan, { timezone: timezone ?? DEFAULT_TIMEZONE });
-  logger.info("jobs/scheduler", `Daily trends scan registered — ${SCAN_CRON} (${timezone ?? DEFAULT_TIMEZONE})`);
+export async function registerJobs(): Promise<void> {
+  const timezone = await resolveTimezone();
+
+  cron.schedule(SCAN_CRON, runDailyTrendsScan, { timezone });
+  logger.info("jobs/scheduler", `Daily trends scan registered — ${SCAN_CRON} (${timezone})`);
 }
