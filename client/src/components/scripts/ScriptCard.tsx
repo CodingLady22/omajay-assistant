@@ -1,9 +1,44 @@
+import type { ReactElement } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Script } from "@/lib/mock-scripts";
 
 type Props = {
   script: Script;
 };
+
+function renderBody(script: Script): ReactElement | null {
+  switch (script.kind) {
+    case "reel":
+      return (
+        <div className="text-xs leading-[1.65] text-text-secondary">
+          <div>
+            <span className="font-medium text-text-primary">Hook (0–3s):</span> {script.hook}
+          </div>
+          <div className="mt-1">
+            <span className="font-medium text-text-primary">Body:</span> {script.body}
+          </div>
+          <div className="mt-1">
+            <span className="font-medium text-text-primary">CTA:</span> {script.cta}
+          </div>
+        </div>
+      );
+    case "caption":
+      return <div className="text-xs leading-[1.65] text-text-secondary">{script.text}</div>;
+    case "carousel":
+      // No design mock or agreed layout for carousels yet (feature 11) — an explicit
+      // placeholder so this never silently renders through the caption path instead.
+      return <div className="text-xs italic leading-[1.65] text-text-secondary">Carousel rendering not yet implemented.</div>;
+    default: {
+      // Compile-time exhaustiveness guard only — `script` is never actually `never` at
+      // runtime if untyped/real data ever sends an unrecognized `kind` (feature 11+).
+      // Degrade to nothing rather than returning the raw object as a JSX child, which
+      // would crash the render ("Objects are not valid as a React child").
+      const exhaustiveCheck: never = script;
+      console.error("[ScriptCard] unhandled script kind:", exhaustiveCheck);
+      return null;
+    }
+  }
+}
 
 export function ScriptCard({ script }: Props) {
   const navigate = useNavigate();
@@ -16,21 +51,7 @@ export function ScriptCard({ script }: Props) {
           {script.badgeLabel}
         </span>
       </div>
-      {script.kind === "reel" ? (
-        <div className="text-xs leading-[1.65] text-text-secondary">
-          <div>
-            <span className="font-medium text-text-primary">Hook (0–3s):</span> {script.hook}
-          </div>
-          <div className="mt-1">
-            <span className="font-medium text-text-primary">Body:</span> {script.body}
-          </div>
-          <div className="mt-1">
-            <span className="font-medium text-text-primary">CTA:</span> {script.cta}
-          </div>
-        </div>
-      ) : (
-        <div className="text-xs leading-[1.65] text-text-secondary">{script.text}</div>
-      )}
+      {renderBody(script)}
       <button
         type="button"
         onClick={() => navigate("/", { state: { prompt: script.actionPrompt } })}

@@ -9,7 +9,7 @@ export function ScriptsPage() {
     <div className="flex-1 overflow-y-auto px-5.5 py-4.5">
       <div className="flex flex-col gap-2.5">
         {MOCK_SCRIPTS.map((script) => (
-          <ScriptCard key={script.title} script={script} />
+          <ScriptCard key={script.id} script={script} />
         ))}
       </div>
       <button

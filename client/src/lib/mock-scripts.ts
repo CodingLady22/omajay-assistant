@@ -1,9 +1,11 @@
-export type ScriptKind = "reel" | "caption" | "carousel";
 export type ScriptStatus = "draft" | "posted";
 
 type ScriptBase = {
+  id: string;
   title: string;
   badgeLabel: string;
+  // Carried for schema fidelity (mirrors the server's `scripts.status` field) —
+  // not yet rendered; the mock's "· Draft" is literal title text, not a status badge.
   status: ScriptStatus;
   actionLabel: string;
   actionPrompt: string;
@@ -23,6 +25,8 @@ export type CaptionScript = ScriptBase & {
 
 export type CarouselScript = ScriptBase & {
   kind: "carousel";
+  // Carried for schema fidelity, same reasoning as ScriptBase.status — ScriptCard
+  // currently renders a "not yet implemented" placeholder for carousels and ignores this.
   text: string;
 };
 
@@ -30,6 +34,7 @@ export type Script = ReelScript | CaptionScript | CarouselScript;
 
 export const MOCK_SCRIPTS: Script[] = [
   {
+    id: "glass-skin-reel",
     kind: "reel",
     title: "Glass Skin Reel · Draft",
     badgeLabel: "Reel · 30s",
@@ -41,6 +46,7 @@ export const MOCK_SCRIPTS: Script[] = [
     actionPrompt: "Expand the glass skin Reel script with on-screen text suggestions",
   },
   {
+    id: "brand-caption-lumiere",
     kind: "caption",
     title: "Brand Caption · Lumière",
     badgeLabel: "IG Post",
