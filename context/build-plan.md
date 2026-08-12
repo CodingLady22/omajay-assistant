@@ -164,6 +164,8 @@ Set up the project shell.
 - `server/agents/content-agent.ts` — given a trend/topic/vibe, the LLM (temp 0.7) returns a structured Reel script (hook/body/cta), caption variations, hashtags.
 - Save to `scripts`; `GET/POST /api/scripts`.
 - Wire the dashboard library to real data.
+- **Consolidate the `Script` type.** Feature 10 defined a client-only `Script` type (discriminated union: `ReelScript`/`CaptionScript`/`CarouselScript`) in `client/src/lib/mock-scripts.ts` for the mock UI. When wiring real data here, move it into the shared `client/src/lib/types.ts` alongside `Trend` and delete the mock file — same pattern feature 08 used for trends.
+- **Extract two duplicated UI patterns while these files are already being touched for real-data wiring** (flagged in feature 10's `/code-review`, deliberately deferred here rather than fixed in place to avoid churning the same files twice): (1) the chip-button className (`rounded-full border border-border px-[11px] py-1 text-[11px] text-text-secondary hover:border-pink-mid hover:bg-pink-light hover:text-pink`) is copy-pasted 4× across `QuickChips.tsx`, `TrendsPage.tsx`, `ScriptCard.tsx`, `ScriptsPage.tsx` — extract into a shared `<Chip>` component. (2) the `navigate("/", { state: { prompt } })` prefill-and-go-to-chat pattern is copy-pasted 4× across `TrendCard.tsx`, `TrendsPage.tsx`, `ScriptCard.tsx`, `ScriptsPage.tsx` — extract into a shared helper (e.g. a `useChatPrompt()` hook).
 
 **Verify:** "write me a Reel script about glass skin" on WhatsApp returns a structured script; it appears in the dashboard library.
 
