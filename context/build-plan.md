@@ -164,6 +164,7 @@ Set up the project shell.
 - `server/agents/content-agent.ts` — given a trend/topic/vibe, the LLM (temp 0.7) returns a structured Reel script (hook/body/cta), caption variations, hashtags.
 - Save to `scripts`; `GET/POST /api/scripts`.
 - Wire the dashboard library to real data.
+- **Consolidate the `Script` type.** Feature 10 defined a client-only `Script` type (discriminated union: `ReelScript`/`CaptionScript`/`CarouselScript`) in `client/src/lib/mock-scripts.ts` for the mock UI. When wiring real data here, move it into the shared `client/src/lib/types.ts` alongside `Trend` and delete the mock file — same pattern feature 08 used for trends.
 
 **Verify:** "write me a Reel script about glass skin" on WhatsApp returns a structured script; it appears in the dashboard library.
 

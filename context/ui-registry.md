@@ -173,3 +173,29 @@ Last updated: 2026-08-08
 This is the canonical "clickable card" pattern — a whole-card `<button>` (not a wrapped div+onClick) with `hover:border-pink-mid hover:shadow-card-hover` as the interactive cue instead of a background-color change, since cards stay white per `ui-tokens.md`. `shadow-card-hover` (`--shadow-card-hover`) is the reusable hover-shadow token — any future clickable card (Scripts, Contracts) should reuse this exact hover pair rather than inventing a new one. The platform badge colors are fixed per platform (`ig`/`yt`/`tt` tokens) and must never swap, matching `ui-tokens.md`'s "Platform badge colours are fixed" invariant.
 
 **2026-08-08 — real data replaces the emoji-block thumbnail.** Feature 08 wired real trend data in; the decorative emoji + colored-block thumbnail (mock-only) was replaced with the actual platform thumbnail image (`object-cover`, fills the `h-22` block). The per-platform colored block is now a *fallback only* — shown when `trend.thumbnail` is empty, not the default treatment. The sub-format label ("Instagram · Reel") was also dropped to platform-name-only ("Instagram" / "YouTube") since real API data doesn't carry that granularity — confirmed against `context/designs/glam-ai.html`'s `.trend-platform` CSS (`font-size:10px; text-transform:uppercase; letter-spacing:0.08em`), which is plain single-line text with no length assumption baked in, so this drops into the same slot cleanly. **`line-clamp-2` added to the title** — real titles (raw YouTube titles, often long/hashtag-heavy) made card heights ragged compared to the mock's curated short titles; any future card showing unbounded external text should clamp similarly rather than let row heights drift.
+
+---
+
+### ScriptCard
+
+File: client/src/components/scripts/ScriptCard.tsx
+Last updated: 2026-08-12
+
+| Property         | Class                                                              |
+| ---------------- | ------------------------------------------------------------------- |
+| Background       | `bg-surface`                                                        |
+| Border            | `border-[0.5px] border-border` (static — no hover state)            |
+| Border radius     | `rounded-lg` (card) · `rounded-full` (kind badge, action chip)      |
+| Text — primary    | `text-text-primary` (title, 13px medium · inline field labels "Hook:"/"Body:"/"CTA:", medium weight) |
+| Text — secondary  | `text-text-secondary` (12px body copy, `leading-[1.65]`)            |
+| Spacing           | `px-4 py-3.5` card padding · `mb-2` header-to-body gap · `mt-1` between body lines · `mt-2.5` body-to-chip gap |
+| Hover state       | none on the card itself; action chip uses the standard chip hover (see QuickChips) |
+| Shadow            | none                                                                 |
+| Accent usage      | kind badge: `bg-info-bg text-info` (`px-1.75 py-0.5 text-[10px] font-normal rounded-full`) |
+
+**Pattern notes:**
+This is a deliberate divergence from `TrendCard`'s "whole card is a clickable button" pattern — the mock renders `script-card` as a static, non-interactive container with only its inner chip(s) as click targets, and there's no single obvious "go to chat" action for a whole script card the way there is for a trend. Do not wrap future ScriptCard-like containers in a button unless the design shows the whole card as one action.
+
+The kind badge deliberately does **not** reuse the DM-classification pink/`success` pair (`bg-pink-light text-pink` / `bg-success-bg text-success`) even though the design mock's raw HTML reuses those same CSS classes for its badges. That reuse was judged to be a coincidence of the static mock, not an intended shared meaning — pink/green stay reserved for DM classification only (per `ui-tokens.md`'s "never reversed" invariant), so any future "kind"/"type"/"format" badge unrelated to DM classification should use `bg-info-bg text-info` instead, matching this component. The badge's pill shape (`px-1.75 py-0.5 text-[10px] rounded-full`) is reused verbatim from `TrendCard`'s platform badge — same shape, different color pair.
+
+The action chip button reuses `QuickChips`' exact canonical chip classes unchanged (`rounded-full border border-border px-[11px] py-1 text-[11px] text-text-secondary hover:border-pink-mid hover:bg-pink-light hover:text-pink`) plus a `mt-2.5` top margin for placement under the card body — no new chip variant was introduced.

@@ -29,7 +29,7 @@ Last updated: 2026-08-11
 - **`/review` Layer 3 finding (fixed):** `registerJobs()` originally called `getProfile()` unguarded — a thrown error (not just a missing profile) would propagate through `bootstrap()` to `index.ts`'s top-level catch and `process.exit(1)`, crashing the *entire server* over a timezone lookup. Fixed by extracting `resolveTimezone()` with its own try/catch, falling back to `"UTC"` on any failure. Re-verified live: normal boot still resolves the real `Europe/Rome` from the seeded profile.
 - **`/review` Layer 2 finding (deferred, plan recorded):** `getProfile()` lives in a trends-named file but is generic profile-fetch logic; `scheduler.ts` reaching into `trends-agent.ts` for it is a minor coupling smell. Not fixed now (two consumers only) — plan recorded in `progress-tracker.md` and `build-plan.md`'s feature 21 entry.
 - **`npm run dev` background verification twice got stuck with no boot logs** — root cause both times was a *previous* backgrounded dev-server process not being fully killed by `TaskStop` (tsx watch's child `node.exe` survived), leaving port 3001 occupied so the new instance hung silently. Fixed each time by `netstat -ano | grep :3001` to find the PID, then `Stop-Process -Id <pid> -Force` via PowerShell. Worth remembering: always verify the port is actually free after `TaskStop` on a `tsx watch` process, don't assume it worked.
-- **Auto-commit reappeared** (same VS Code-extension checkpointing behavior noted in feature 08's session) — `d91f6b7` captured the pre-review-fix state. Not concerning, same as last time; developer is committing manually this session so no action needed from me.
+- **Correction (2026-08-11):** the "auto-commit" pattern noted in features 08 and 09 was misdiagnosed — the developer confirmed those commits were made by them manually, not a VS Code-extension side effect. The developer commits their own work in this project and will continue to do so unless they say otherwise or set up something different. I do not create commits unless explicitly asked.
 
 ## Current state
 
@@ -43,6 +43,5 @@ Confirm the commit is in and the repo is clean, then proceed to **Feature 10 —
 
 ## Open questions
 
-- Whether the recurring VS Code-extension auto-commit behavior is expected/desired — flagged twice now (features 08 and 09), still no developer decision recorded on whether to look into/disable it.
 - Whether `YOUTUBE_API_KEY` quota usage from repeated live verification runs (feature 08 + feature 09 sessions) is a concern — informational only, no action taken.
 - `@langchain/google` still pre-1.0 — flagged previously for a stability re-check during the pre-production multi-provider hardening pass. Still no action needed yet.
