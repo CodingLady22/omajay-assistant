@@ -54,23 +54,37 @@ export type TikTokTrend = {
   viewCount: number;
 };
 
-export type ScriptBody = {
+export type ScriptStatus = "draft" | "posted";
+
+type ScriptCommon = {
+  _id?: ObjectId;
+  title: string;
+  trend_id?: ObjectId;
+  hashtags: string[];
+  status: ScriptStatus;
+  created_at: Date;
+};
+
+export type ReelScriptDoc = ScriptCommon & {
+  kind: "reel";
   hook: string;
   body: string;
   cta: string;
-  variants?: string[];
 };
 
-export type ScriptDoc = {
-  _id?: ObjectId;
-  kind: "reel" | "caption" | "carousel";
-  title: string;
-  trend_id?: ObjectId;
-  body: ScriptBody;
-  hashtags: string[];
-  status: "draft" | "posted";
-  created_at: Date;
+export type CaptionScriptDoc = ScriptCommon & {
+  kind: "caption";
+  variants: string[];
 };
+
+export type CarouselScriptDoc = ScriptCommon & {
+  kind: "carousel";
+  // Carried for schema completeness — no design mock or generation path yet
+  // (feature 11 scoped content-agent to reel + caption only).
+  text: string;
+};
+
+export type ScriptDoc = ReelScriptDoc | CaptionScriptDoc | CarouselScriptDoc;
 
 export type Dm = {
   _id?: ObjectId;

@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { getTrends } from "@/lib/api";
+import { useChatPrompt } from "@/lib/useChatPrompt";
 import type { Trend } from "@/lib/types";
+import { Chip } from "@/components/common/Chip";
 import { TrendCard } from "@/components/trends/TrendCard";
 
 type LoadState = "loading" | "error" | "ready";
 
 export function TrendsPage() {
-  const navigate = useNavigate();
+  const goToChat = useChatPrompt();
   const [trends, setTrends] = useState<Trend[]>([]);
   const [state, setState] = useState<LoadState>("loading");
 
@@ -49,13 +50,7 @@ export function TrendsPage() {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 px-5.5 py-4.5 text-center">
         <div className="text-[12px] text-text-secondary">No trends scanned yet.</div>
-        <button
-          type="button"
-          onClick={() => navigate("/", { state: { prompt: "What's trending?" } })}
-          className="rounded-full border border-border px-[11px] py-1 text-[11px] text-text-secondary transition-colors hover:border-pink-mid hover:bg-pink-light hover:text-pink"
-        >
-          ✨ What's trending?
-        </button>
+        <Chip onClick={() => goToChat("What's trending?")}>✨ What's trending?</Chip>
       </div>
     );
   }

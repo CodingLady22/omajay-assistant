@@ -199,3 +199,29 @@ This is a deliberate divergence from `TrendCard`'s "whole card is a clickable bu
 The kind badge deliberately does **not** reuse the DM-classification pink/`success` pair (`bg-pink-light text-pink` / `bg-success-bg text-success`) even though the design mock's raw HTML reuses those same CSS classes for its badges. That reuse was judged to be a coincidence of the static mock, not an intended shared meaning — pink/green stay reserved for DM classification only (per `ui-tokens.md`'s "never reversed" invariant), so any future "kind"/"type"/"format" badge unrelated to DM classification should use `bg-info-bg text-info` instead, matching this component. The badge's pill shape (`px-1.75 py-0.5 text-[10px] rounded-full`) is reused verbatim from `TrendCard`'s platform badge — same shape, different color pair.
 
 The action chip button reuses `QuickChips`' exact canonical chip classes unchanged (`rounded-full border border-border px-[11px] py-1 text-[11px] text-text-secondary hover:border-pink-mid hover:bg-pink-light hover:text-pink`) plus a `mt-2.5` top margin for placement under the card body — no new chip variant was introduced.
+
+**2026-08-13 — extracted into `<Chip>`, real data wired in (feature 11).** The action chip now renders via `client/src/components/common/Chip.tsx` instead of a copy-pasted `<button>` (see `Chip` entry below) — same classes, same placement. The kind badge label switched from a per-mock-item `badgeLabel` string to a fixed `KIND_LABEL` map keyed on `script.kind` (`reel: "Reel"`, `caption: "IG Post"`, `carousel: "Carousel"`) since real generated scripts don't carry a bespoke label the way curated mock entries did. Caption rendering changed from a single paragraph to a numbered `Option 1/2/3:` list, because the server now generates real caption **variants** (plural) rather than one mock `text` string — reuses the same `text-xs leading-[1.65] text-text-secondary` styling per line. Navigation now goes through `useChatPrompt()` instead of an inline `navigate("/", { state: { prompt } })` call.
+
+---
+
+### Chip
+
+File: client/src/components/common/Chip.tsx
+Last updated: 2026-08-13
+
+| Property         | Class                                                                      |
+| ---------------- | ----------------------------------------------------------------------------- |
+| Background       | transparent default → `bg-pink-light` on hover                              |
+| Border            | `border-border` default → `border-pink-mid` on hover                        |
+| Border radius     | `rounded-full`                                                              |
+| Text — primary    | n/a                                                                          |
+| Text — secondary  | `text-text-secondary` default → `text-pink` on hover                        |
+| Spacing           | `px-[11px] py-1`; extra margin (e.g. `mt-2.5`) passed in via `className`     |
+| Hover state       | `hover:border-pink-mid hover:bg-pink-light hover:text-pink`                 |
+| Shadow            | none                                                                         |
+| Accent usage      | pink on hover                                                               |
+
+**Pattern notes:**
+This is the extracted canonical chip button — `QuickChips.tsx`, `TrendsPage.tsx`'s empty state, and `ScriptCard.tsx`/`ScriptsPage.tsx`'s action chips all previously copy-pasted this exact className 4×; feature 11 consolidated them into this one component (flagged for extraction back in feature 10's `/code-review`, deliberately deferred to this feature per `build-plan.md`). It's a thin wrapper around a native `<button type="button">` — accepts all standard button props plus `children`, and merges an optional `className` onto the base classes (so call sites can add spacing like `mt-2.5` without forking the component). Any future quick-action/secondary button should use `<Chip>` directly instead of re-typing the className.
+
+`useChatPrompt()` (`client/src/lib/useChatPrompt.ts`) was extracted alongside it — a one-line hook wrapping `navigate("/", { state: { prompt } })`, replacing the same 4 duplicated call sites (`TrendCard.tsx`, `TrendsPage.tsx`, `ScriptCard.tsx`, `ScriptsPage.tsx`). Not a visual pattern, so it has no table entry here, but any future "go to chat with a prefilled prompt" action should use this hook rather than calling `navigate` directly.

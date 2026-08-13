@@ -1,5 +1,5 @@
 import cron from "node-cron";
-import { getProfile } from "@/agents/trends-agent";
+import { getProfile } from "@/db/profile";
 import { runDailyTrendsScan } from "@/jobs/daily-trends";
 import { logger } from "@/lib/logger";
 

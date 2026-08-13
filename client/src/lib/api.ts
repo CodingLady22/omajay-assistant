@@ -1,4 +1,4 @@
-import type { Trend } from "@/lib/types";
+import type { Script, Trend } from "@/lib/types";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -28,4 +28,8 @@ export async function sendChatMessage(text: string): Promise<ApiResponse<{ respo
 
 export async function getTrends(): Promise<ApiResponse<Trend[]>> {
   return request("/api/trends");
+}
+
+export async function getScripts(): Promise<ApiResponse<Script[]>> {
+  return request("/api/scripts");
 }
