@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { useChatPrompt } from "@/lib/useChatPrompt";
 import type { Trend, TrendPlatform } from "@/lib/types";
 
 type Props = {
@@ -24,14 +24,14 @@ const PLATFORM_FALLBACK_BG: Record<TrendPlatform, string> = {
 };
 
 export function TrendCard({ trend }: Props) {
-  const navigate = useNavigate();
+  const goToChat = useChatPrompt();
   const badge = PLATFORM_BADGE[trend.platform];
   const prompt = `Give me content ideas inspired by this trending post: "${trend.title}"`;
 
   return (
     <button
       type="button"
-      onClick={() => navigate("/", { state: { prompt } })}
+      onClick={() => goToChat(prompt)}
       className="overflow-hidden rounded-lg border-[0.5px] border-border bg-surface text-left transition-[border-color,box-shadow] hover:border-pink-mid hover:shadow-card-hover"
     >
       <div className={`relative h-22 ${trend.thumbnail ? "" : PLATFORM_FALLBACK_BG[trend.platform]}`}>

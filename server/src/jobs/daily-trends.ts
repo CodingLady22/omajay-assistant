@@ -1,4 +1,5 @@
-import { DEFAULT_TOPIC, getProfile, scanAndStoreTrends } from "@/agents/trends-agent";
+import { DEFAULT_TOPIC, scanAndStoreTrends } from "@/agents/trends-agent";
+import { getProfile } from "@/db/profile";
 import { logger } from "@/lib/logger";
 
 export async function runDailyTrendsScan(): Promise<void> {

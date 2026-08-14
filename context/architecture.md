@@ -99,7 +99,8 @@ Both surfaces hit the same REST endpoints. The same orchestrator runs regardless
 │   ├── db/
 │   │   ├── client.ts                  → MongoDB connection (singleton)
 │   │   ├── collections.ts             → Typed collection accessors
-│   │   └── indexes.ts                 → Index setup incl. vector index
+│   │   ├── indexes.ts                 → Index setup incl. vector index
+│   │   └── profile.ts                 → getProfile() — shared across trends-agent, content-agent, jobs/*
 │   │
 │   ├── lib/
 │   │   ├── llm.ts                     → LLM client (Gemini for now) — single source of model config
@@ -313,18 +314,25 @@ Trending content from the scheduled scan.
 
 ### `scripts`
 
-Generated content.
+Generated content. A discriminated union on `kind` — each kind carries only the fields it needs, rather than one generic `body` object shared by all three (feature 11 decision, replacing the original loose `body` shape).
 
-| Field      | Type     | Notes                                  |
-| ---------- | -------- | -------------------------------------- |
-| _id        | ObjectId |                                        |
-| kind       | string   | "reel" \| "caption" \| "carousel"      |
-| title      | string   |                                        |
-| trend_id   | ObjectId | Optional — source trend                |
-| body       | object   | Structured: hook, body, cta, variants  |
-| hashtags   | string[] |                                        |
-| status     | string   | "draft" \| "posted"                    |
-| created_at | Date     |                                        |
+| Field      | Type     | Notes                                                                        |
+| ---------- | -------- | ----------------------------------------------------------------------------- |
+| _id        | ObjectId |                                                                               |
+| kind       | string   | "reel" \| "caption" \| "carousel" — discriminant                             |
+| title      | string   |                                                                               |
+| trend_id   | ObjectId | Optional — source trend. Not wired until a structured trend reference travels with a chat request (deferred at feature 11) |
+| hashtags   | string[] | Always present, independent of kind                                          |
+| status     | string   | "draft" \| "posted"                                                          |
+| created_at | Date     |                                                                               |
+
+Kind-specific fields:
+
+| kind     | Fields                                                                      |
+| -------- | ---------------------------------------------------------------------------- |
+| reel     | `hook: string`, `body: string`, `cta: string`                                |
+| caption  | `variants: string[]` — multiple caption options in one draft                 |
+| carousel | `text: string` — schema-complete only; content-agent doesn't generate this kind yet (no design mock, feature 11 decision) |
 
 ### `dms`
 

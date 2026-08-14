@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { collections } from "@/db/collections";
+import { getProfile } from "@/db/profile";
 import { llm } from "@/lib/llm";
 import { logger } from "@/lib/logger";
 import { extractJson } from "@/lib/utils";
@@ -22,10 +23,6 @@ const TOPIC_EXTRACTION_PROMPT = `You extract a search topic from a message askin
 If the message names a specific topic, style, look, or theme (e.g. "bridal makeup", "glass skin", "mob wife aesthetic"), respond with just that topic in a few words.
 If the message is a generic request with no specific topic (e.g. "what's trending?", "what's trending this week?", "any trends?"), respond with exactly NONE.
 Respond with only the topic or NONE — no punctuation, no explanation.`;
-
-export async function getProfile(): Promise<Profile | null> {
-  return collections.profile().findOne({});
-}
 
 async function extractTopic(message: string, fallback: string): Promise<string> {
   try {
