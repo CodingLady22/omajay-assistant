@@ -99,7 +99,8 @@ Both surfaces hit the same REST endpoints. The same orchestrator runs regardless
 │   ├── db/
 │   │   ├── client.ts                  → MongoDB connection (singleton)
 │   │   ├── collections.ts             → Typed collection accessors
-│   │   └── indexes.ts                 → Index setup incl. vector index
+│   │   ├── indexes.ts                 → Index setup incl. vector index
+│   │   └── profile.ts                 → getProfile() — shared across trends-agent, content-agent, jobs/*
 │   │
 │   ├── lib/
 │   │   ├── llm.ts                     → LLM client (Gemini for now) — single source of model config

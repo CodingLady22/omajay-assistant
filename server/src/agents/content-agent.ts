@@ -6,7 +6,7 @@ import { llm } from "@/lib/llm";
 import { logger } from "@/lib/logger";
 import { extractJson } from "@/lib/utils";
 import type { AgentState } from "@/agents/state";
-import type { CaptionScriptDoc, Profile, ReelScriptDoc } from "@/types";
+import type { CaptionScriptDoc, Profile, ReelScriptDoc, ScriptDoc } from "@/types";
 
 const SCRIPT_TEMPERATURE = 0.7;
 
@@ -43,9 +43,13 @@ const reelGenerationSchema = z.object({
   hashtags: z.array(z.string()),
 });
 
+// The prompt asks for 3 variations — .min(2) is a safe floor, not the exact
+// target: reject a degenerate single-variant response (not really "variations"
+// plural) without failing the whole generation over the model returning 2
+// instead of 3.
 const captionGenerationSchema = z.object({
   title: z.string(),
-  variants: z.array(z.string()).min(1),
+  variants: z.array(z.string()).min(2),
   hashtags: z.array(z.string()),
 });
 
@@ -92,6 +96,13 @@ async function generateCaption(message: string, profile: Profile | null): Promis
 function buildConfirmation(kind: ScriptKind, title: string): string {
   const label = kind === "reel" ? "Reel script" : "caption";
   return `Here's your ${label}: "${title}" — saved to your scripts library. ✨`;
+}
+
+// Kept behind this one function (mirroring getStoredTrends() in trends-agent.ts)
+// so both routes/scripts.ts and any future caller (e.g. a briefing agent) read
+// scripts through one place instead of scattering raw collections.scripts() reads.
+export async function getStoredScripts(): Promise<ScriptDoc[]> {
+  return collections.scripts().find({}).sort({ created_at: -1 }).toArray();
 }
 
 const SMALLTALK_SYSTEM_PROMPT = `You are Sofia's warm, concise AI assistant for her makeup/beauty content business.
