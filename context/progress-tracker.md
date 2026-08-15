@@ -7,8 +7,8 @@ Update this file after every completed feature. Any AI agent reading this should
 ## Current Status
 
 **Phase:** 5 — Calendar
-**Last completed:** 11 Content Agent + Save
-**Next:** 12 Calendar Panel — Full UI (Mock)
+**Last completed:** 12 Calendar Panel — Full UI (Mock)
+**Next:** 13 Calendar Read
 **Deferred:** 05 WhatsApp Webhook + Send — blocked on a WhatsApp Cloud API token from Meta. Instagram's real implementation within 07 (`services/instagram.ts`) — blocked on `INSTAGRAM_TOKEN`/`INSTAGRAM_ACCOUNT_ID`, currently a `[]` stub. See Decisions below.
 
 ---
@@ -40,7 +40,7 @@ Update this file after every completed feature. Any AI agent reading this should
 
 ### Phase 5 — Calendar
 
-- [ ] 12 Calendar Panel — Full UI (Mock)
+- [x] 12 Calendar Panel — Full UI (Mock)
 - [ ] 13 Calendar Read
 - [ ] 14 Calendar Add — Propose Then Confirm
 
@@ -179,3 +179,12 @@ _Add notes here as the build progresses — workarounds, patterns, anything that
 - Feature 11 built: `server/src/db/profile.ts` (new), `server/src/agents/content-agent.ts` (real implementation — `classifyKind`, `generateReel`, `generateCaption`, `smalltalkReply`, `getStoredScripts`, `contentAgent`), `server/src/routes/scripts.ts` (new, `GET /api/scripts` via `getStoredScripts()`), mounted in `index.ts`. `server/src/types/index.ts` (`ScriptDoc` → discriminated union), `architecture.md` (`scripts` schema + folder tree). Client: `client/src/lib/types.ts` (`Script` union added), `client/src/lib/mock-scripts.ts` deleted, `client/src/lib/api.ts` (`getScripts()` added), `client/src/components/common/Chip.tsx` (new), `client/src/lib/useChatPrompt.ts` (new), `QuickChips.tsx`/`TrendCard.tsx`/`TrendsPage.tsx`/`ScriptCard.tsx`/`ScriptsPage.tsx` all updated to use both.
 - Verified live end-to-end against the real stack (not mocked): reel generation, caption generation (3 real variants), and a smalltalk greeting all tested via `curl` through the actual compiled graph — each classified and routed correctly, each script saved and readable back via `GET /api/scripts`. Playwright pass against the real dashboard: chat-driven generation, `/scripts` rendering real data (including the new numbered caption-variants layout), script-card chip → chat prefill → clear-on-reload, and **`/trends` re-verified unaffected by the `Chip`/`useChatPrompt` refactor** (12 real trend cards rendered, card click still prefills chat) — zero console/page errors throughout. `tsc -b --noEmit` clean on both `server/` and `client/`.
 - `/review` (3-layer pass) found 1 Important + 2 Minor issues, all fixed and re-verified: (1) **fixed** — `routes/scripts.ts` originally called `collections.scripts()` directly instead of going through an agent-module function, breaking the boundary `routes/trends.ts` → `getStoredTrends()` had already established and `progress-tracker.md` confirmed as intentional; added `getStoredScripts()` to `content-agent.ts` (mirroring `getStoredTrends()`) and pointed the route at it — re-verified live (route still returns correctly-sorted data through the new indirection). (2) **fixed** — `architecture.md`'s `server/db/` folder tree hadn't been updated to list the new `profile.ts`. (3) **fixed** — `captionGenerationSchema`'s `variants` bound was `.min(1)`, looser than the prompt's "3 variations" intent; tightened to `.min(2)` as a safe floor (rejects a degenerate single-variant response without failing over the model returning 2 instead of 3) — re-verified live, a real generation still passes.
+- **Feature 12 — Calendar Panel built with mock data, `client/src/lib/mock-events.ts` (new — `CalendarEvent` type + 4 mock entries), `client/src/components/calendar/{CalendarGrid,EventItem}.tsx` (new), `client/src/pages/CalendarPage.tsx` (rewritten, replacing `ComingSoonPanel`).** No server changes — pure client mock, same as features 06/10.
+- **Feature 12 — month/today are computed from the real current date (`new Date()`), not hardcoded** to the design mock's static "June 2026" — `/architect`-confirmed, since "today highlighted" only means something if today is actually today.
+- **Feature 12 — event dot colors reuse the existing closed token palette** (`pink`/`coral`/`success`/`info`) rather than adding two new near-duplicate green/blue tokens to match the mock's raw `#639922`/`#378ADD` hex — `/architect`-confirmed, keeps `ui-tokens.md`'s palette closed. `color` is a client-only mock field; the server `events` schema has no category/color column, so feature 13 will need to decide how a real Google Calendar read maps to one of these four.
+- **Feature 12 — prev/next month chevrons render (matching the mock exactly) but are `disabled`, no handler.** Functional month navigation is deferred to feature 13 rather than building state for it now against mock-only data.
+- **Feature 12 — `CalendarEvent` carries a stable `id` field from the start**, keyed on directly in `EventItem`'s list — added per explicit developer instruction during `/architect`, learned from feature 10's title-keying issue, so feature 13's real-data wiring won't hit the same React-key problem.
+- **Feature 12 — `CalendarEvent.status` (`"confirmed" | "proposed"`) carried for schema fidelity with `events.status`**, unused/unrendered for now — same convention `Trend`/`Script` used before their real-data features.
+- Verified live via Playwright (not mocked UI-wise, but no backend to hit yet): screenshotted `/calendar` at all 3 responsive breakpoints against `glam-ai.html`, zero console/page errors at any breakpoint. Click-through confirmed the "+ Add event ↗" chip prefills the chat textarea with its exact prompt and the prefill correctly does not resurface after reload. `tsc -b --noEmit` clean on `client/`.
+- `/imprint` run on `CalendarGrid` and `EventItem` — new `ui-registry.md` entries added, documenting the dynamic-date computation, the closed-palette dot-color choice, and that `rounded-md` (vs. `TrendCard`/`ScriptCard`'s `rounded-lg`) is an intentional match to the design mock's own CSS, not drift.
+- `/review` (3-layer pass): 0 issues found, ready to ship. One informational note (no action needed): mock event dates are fixed to August 2026 to align with "today" at build time and will read as stale once real time moves into a different month — expected of static mock data, resolved when feature 13 wires in real reads.

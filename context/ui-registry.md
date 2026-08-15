@@ -225,3 +225,49 @@ Last updated: 2026-08-13
 This is the extracted canonical chip button — `QuickChips.tsx`, `TrendsPage.tsx`'s empty state, and `ScriptCard.tsx`/`ScriptsPage.tsx`'s action chips all previously copy-pasted this exact className 4×; feature 11 consolidated them into this one component (flagged for extraction back in feature 10's `/code-review`, deliberately deferred to this feature per `build-plan.md`). It's a thin wrapper around a native `<button type="button">` — accepts all standard button props plus `children`, and merges an optional `className` onto the base classes (so call sites can add spacing like `mt-2.5` without forking the component). Any future quick-action/secondary button should use `<Chip>` directly instead of re-typing the className.
 
 `useChatPrompt()` (`client/src/lib/useChatPrompt.ts`) was extracted alongside it — a one-line hook wrapping `navigate("/", { state: { prompt } })`, replacing the same 4 duplicated call sites (`TrendCard.tsx`, `TrendsPage.tsx`, `ScriptCard.tsx`, `ScriptsPage.tsx`). Not a visual pattern, so it has no table entry here, but any future "go to chat with a prefilled prompt" action should use this hook rather than calling `navigate` directly.
+
+---
+
+### CalendarGrid
+
+File: client/src/components/calendar/CalendarGrid.tsx
+Last updated: 2026-08-15
+
+| Property         | Class                                                              |
+| ---------------- | ------------------------------------------------------------------- |
+| Background       | none on the grid itself (inherits page `bg-surface`) · today cell: `bg-pink-light` |
+| Border            | `border-[0.5px] border-border` (nav chevron buttons only)          |
+| Border radius     | `rounded-md` (day cells, chevron buttons)                           |
+| Text — primary    | `text-text-primary` (default day number) · month label: `font-display text-[15px] text-text-primary` |
+| Text — secondary  | `text-text-secondary` (weekday labels, 10px uppercase `tracking-[0.05em]`) |
+| Spacing           | `gap-0.5` grid gap · `py-1.5` day-cell padding · `p-1` weekday-label padding |
+| Hover state       | day cell: `hover:bg-surface-secondary` (non-today only)             |
+| Shadow            | none                                                                 |
+| Accent usage      | today cell: `bg-pink-light text-pink font-semibold` · event dot: `bg-pink` absolute-positioned `bottom-0.5`, centered |
+
+**Pattern notes:**
+Today's highlight reuses the exact `bg-pink-light text-pink font-medium`-family active-state triple from `Sidebar.tsx` (here `font-semibold` instead of `font-medium` to read as a day number, not a nav label) — confirms the project's one canonical "selected/current" treatment extends to calendar cells too. The event-dot indicator is always `bg-pink` regardless of the underlying event's own color (see `EventItem`) — the grid only signals "something is on this day," not what kind; color-coding is reserved for the event list. Month/today are computed from the real current date (`new Date()`), never hardcoded — this diverges from the static "June 2026" in `glam-ai.html`'s mock deliberately (confirmed during `/architect`). The prev/next chevrons render in the design's exact position and sizing but are `disabled` with `opacity-40` and no handler — real month navigation is deferred to feature 13; any future date-range feature should replace this rather than layering new state on top.
+
+---
+
+### EventItem
+
+File: client/src/components/calendar/EventItem.tsx
+Last updated: 2026-08-15
+
+| Property         | Class                                                              |
+| ---------------- | ------------------------------------------------------------------- |
+| Background       | `bg-surface`                                                        |
+| Border            | `border-[0.5px] border-border`                                      |
+| Border radius     | `rounded-md`                                                         |
+| Text — primary    | `text-text-primary` (title, 13px medium)                            |
+| Text — secondary  | `text-text-secondary` (meta line, 11px — weekday/date/time/location) |
+| Spacing           | `gap-2.5` dot/text gap · `px-3 py-2.5` card padding · `mt-0.5` title-to-meta gap |
+| Hover state       | none                                                                 |
+| Shadow            | none                                                                 |
+| Accent usage      | dot: `bg-pink` / `bg-coral` / `bg-success` / `bg-info` per event's `color` field, `h-2 w-2 rounded-full` |
+
+**Pattern notes:**
+The four dot colors are drawn from the existing closed palette (`pink`, `coral`, `success`, `info`) rather than adding two new near-duplicate green/blue tokens to match the design mock's raw `#639922`/`#378ADD` — confirmed during `/architect` as a deliberate divergence from the mock's exact hex, keeping `ui-tokens.md`'s token set closed. `color` is a client-only mock field (the server `events` schema has no category/color column yet); feature 13 will need to decide how a real Google Calendar read maps to one of these four before this can go further than mock data. The meta line's "All day" vs. time-range formatting is derived (start at 00:00 + end at 23:59 → "All day"), not a stored flag — matches the mock's `.event-time` text exactly for both cases.
+
+`rounded-md` (10px) here vs. `rounded-lg` (14px) on `TrendCard`/`ScriptCard` is **not** drift — it matches `glam-ai.html`'s own CSS exactly (`.event-item`/`.cal-day`/`.cal-nav button` all specify `var(--radius-md)`, while `.trend-card`/`.script-card` specify `var(--radius-lg)`). The design intentionally uses the smaller radius for list-row-style items and the larger one for grid-tile cards — any future list-row component (e.g. a DM row) should default to `rounded-md` unless the mock shows otherwise.
