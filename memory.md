@@ -1,56 +1,69 @@
-# Memory — Feature 11: Content Agent + Save
+# Memory — Feature 12: Calendar Panel — Full UI (Mock)
 
-Last updated: 2026-08-14
+Last updated: 2026-08-16
 
 ## What was built
 
-**Feature 11, built via `/architect` → build → `/imprint` → `/review` (1 pass, 3 findings, all fixed and re-verified live).** Branch `contentAgent`, off `main` (post-feature-10 merge, PR #10). Developer committed the initial build as `47164f7` ("feat: build content agent") mid-session; the `/review` fix round (3 issues) is uncommitted on top — **developer commits their own work in this project**, no commits made by me.
+**Feature 12, built via `/architect` → build → `/imprint` → `/review` (1 pass, 0 issues — shipped clean first pass).** Branch `calendarPanel`, off `main` (post-feature-11 merge, PR #11). Developer committed the full build themselves as `98d176a` ("feat: build mock UI for calendar") — **developer commits their own work in this project**, no commit made by me.
 
-- `server/src/db/profile.ts` — new. `getProfile()` moved here from `agents/trends-agent.ts` (pre-planned in feature 09's Decisions: "when a third consumer appears, move it" — `content-agent.ts` is that third consumer). All three call sites (`trends-agent.ts`, `jobs/scheduler.ts`, `jobs/daily-trends.ts`) updated to import from here.
-- `server/src/agents/content-agent.ts` — real implementation, replacing the stub. `classifyKind()` (closed-set LLM call, `"reel" | "caption"`, falls back to `"reel"`), `generateReel()`/`generateCaption()` (temp 0.7 via per-call `{ temperature }` option — not `.bind()`, see Problems Solved), `smalltalkReply()` (separate branch for `state.intent !== "content"`), `getStoredScripts()` (exported, mirrors `getStoredTrends()`), `contentAgent()` orchestrating all of the above with a single outer try/catch.
-- `server/src/routes/scripts.ts` — new. `GET /api/scripts` via `getStoredScripts()` (no raw `collections.*` access in the route). No `POST` route — confirmed decision, generation only happens through chat.
-- `server/src/types/index.ts` — `ScriptDoc` reworked from one generic `body: {hook,body,cta,variants?}` shape into a discriminated union on `kind`: `ReelScriptDoc` (`hook`/`body`/`cta`), `CaptionScriptDoc` (`variants: string[]`), `CarouselScriptDoc` (`text`, unused — schema-complete only).
-- `server/src/index.ts` — mounted `scriptsRouter` at `/api/scripts`.
-- `client/src/lib/types.ts` — `Script`/`ReelScript`/`CaptionScript`/`CarouselScript` added, mirroring the server union (JSON-serialized: `_id`/`created_at` as strings). `client/src/lib/mock-scripts.ts` deleted.
-- `client/src/lib/api.ts` — `getScripts()` added.
-- `client/src/components/common/Chip.tsx` — new. Extracted canonical chip-button className (was copy-pasted 4×), thin wrapper over `<button>` accepting standard props + `className` passthrough.
-- `client/src/lib/useChatPrompt.ts` — new. One-line hook wrapping `navigate("/", { state: { prompt } })` (was copy-pasted 4×).
-- `QuickChips.tsx`, `TrendCard.tsx`, `TrendsPage.tsx`, `ScriptCard.tsx`, `ScriptsPage.tsx` — all updated to use `Chip`/`useChatPrompt` instead of inline duplicates. `ScriptCard.tsx` also rewritten for the new discriminated-union type (caption now renders numbered `Option 1/2/3:` variants, not one paragraph) and real kind labels (`KIND_LABEL` map replacing the old per-mock `badgeLabel`). `ScriptsPage.tsx` fetches real data via `getScripts()` with loading/error/empty states, matching `TrendsPage.tsx`'s pattern.
-- `context/architecture.md` — `scripts` schema section rewritten for the discriminated union; `server/db/` folder tree updated to list `profile.ts`.
-- `context/ui-registry.md` — `/imprint`: new `Chip` entry; `ScriptCard`'s existing entry updated in place (not duplicated) with the extraction + caption-variants-rendering change.
-- `context/progress-tracker.md` — feature 11 ticked, phase advanced to 5 (Calendar), full Decisions/Notes trail recorded.
+- `client/src/lib/mock-events.ts` — new. `CalendarEvent` type (`id`, `title`, `start`, `end`, `location`, `color`, `status`) mirroring the server `events` collection schema (architecture.md) plus a client-only `color` field the real schema doesn't have yet. 4 mock entries dated across August 2026 (Lumière shoot, podcast interview, content filming day, Velour brand call).
+- `client/src/components/calendar/CalendarGrid.tsx` — new. Computes month/today from the real current date (`new Date()`), not a hardcoded date. 7-col Mon-first grid, today cell styled with the same `bg-pink-light text-pink` active triple used elsewhere, pink dot on any day with an event. Prev/next chevrons render matching the design exactly but are `disabled`, no handler.
+- `client/src/components/calendar/EventItem.tsx` — new. Dot + title + derived meta line (`Wed 3 Aug · 10:00–14:00 · Milan Studio`, or `All day` when start is 00:00 and end is 23:59). Dot color pulls from the existing closed token palette (`pink`/`coral`/`success`/`info`), not two new tokens the mock's raw hex would have implied.
+- `client/src/pages/CalendarPage.tsx` — rewritten, replacing `ComingSoonPanel`. Renders `CalendarGrid` + sorted event list (keyed on `event.id`) + a `+ Add event ↗` chip via `useChatPrompt()` — prefills chat, never writes directly (hard safety rule).
+- `context/ui-registry.md` — `/imprint`: new `CalendarGrid` and `EventItem` entries, including a note that `EventItem`'s `rounded-md` (vs. `TrendCard`/`ScriptCard`'s `rounded-lg`) matches the design mock's own CSS exactly and isn't drift.
+- `context/progress-tracker.md` — feature 12 ticked, phase still 5, full Decisions/Notes trail recorded.
+
+No server changes this feature — pure client mock, same shape as features 06/10 before their real-data companions.
 
 ## Decisions made
 
-- **`ScriptDoc`/`Script` is a discriminated union on `kind`**, not one generic `body` shape — `/architect`-confirmed (Q1). Caption's `variants: string[]` (plural, real variations) replaces feature 10 mock's single `text` field.
-- **content-agent generates `reel` and `caption` only** — `/architect`-confirmed (Q2). Carousel stays schema-only, matching `ScriptCard`'s pre-existing "not yet implemented" placeholder.
-- **`GET /api/scripts` only, no `POST`** — `/architect`-confirmed (Q3). Content-agent saves internally via the graph, same as trends' scan job; no HTTP round-trip needed.
-- **`trend_id` stays unset** — `/architect`-confirmed (Q4). No structured trend reference travels through free-text chat; guessing via title-match was ruled out as fragile.
-- **`contentAgent` branches on `state.intent`, not just message content.** `graph.ts` routes both `"content"` and `"smalltalk"` to the content node. Added an explicit `if (state.intent !== "content")` branch to a separate `smalltalkReply()` so a greeting doesn't get sent through the script-generation prompt — also resolves the fallback-path gap feature 03's Decisions log had flagged as deferred.
-- **Temperature 0.7 via a per-call `{ temperature }` option on `llm.invoke()`**, not `.bind()`/`.withConfig()` — verified against the installed `@langchain/core@1.2.1` (no `.bind()` on this version's `Runnable`) and `@langchain/google`'s `ChatGoogleFields` (confirms `temperature` is a valid call option). Doesn't touch the shared `lib/llm.ts` singleton.
-- **`getProfile()` relocated to `db/profile.ts`** now that content-agent is the third consumer — exactly the trigger condition feature 09 pre-recorded, done now rather than deferred further.
+- **Month/today computed from the real current date**, not the design mock's static "June 2026" — `/architect`-confirmed, since a "today highlighted" feature only makes sense against the actual day.
+- **Event dot colors reuse the existing 4-token palette** (`pink`/`coral`/`success`/`info`) instead of adding two new near-duplicate green/blue tokens to match the mock's exact `#639922`/`#378ADD` — keeps `ui-tokens.md`'s palette closed. `color` is a client-only mock field; feature 13 must decide how a real Google Calendar read maps to one of these four.
+- **Prev/next month chevrons render but are non-functional** (`disabled`, no handler) — real navigation deferred to feature 13 rather than building throwaway state against mock-only data.
+- **`CalendarEvent` carries a stable `id` field from the start**, keyed on directly — explicit developer instruction during `/architect`, learned from feature 10's title-keying issue, so feature 13's real-data wiring won't repeat it.
+- **`CalendarEvent.status` carried for schema fidelity**, unused/unrendered — same convention `Trend`/`Script` used before their real-data features.
 
 ## Problems solved
 
-- **`llm.bind({ temperature: 0.7 })` would have failed at runtime.** Checked the installed package directly rather than trusting training-data LangChain API shape (`library-docs.md`'s own rule): `@langchain/core@1.2.1`'s `Runnable` prototype has no `.bind()` method (only `.withConfig()`, `.withFallbacks()`, etc.). Instead confirmed `temperature` is part of `BaseChatGoogleCallOptions` (`ChatGoogleFields`), so `llm.invoke(messages, { temperature: 0.7 })` works directly per-call — simpler than either `.bind()` or `.withConfig()` would have been anyway.
-- **`/review` fix 1 (Important): `routes/scripts.ts` originally called `collections.scripts()` directly**, breaking the boundary `routes/trends.ts` → `getStoredTrends()` had already established (confirmed intentional in feature 08's Decisions). Added `getStoredScripts()` to `content-agent.ts`, pointed the route at it, re-verified live.
-- **`/review` fix 2 (Minor): `architecture.md`'s `server/db/` folder tree was missing `profile.ts`.** Added.
-- **`/review` fix 3 (Minor): `captionGenerationSchema`'s `variants` bound was `.min(1)`**, looser than the "3 variations" prompt intent — a degenerate 1-variant response would've silently passed. Tightened to `.min(2)` as a safe floor (rejects the true degenerate case without failing over the model returning 2 instead of 3); re-verified live that a real generation still passes.
-- **`vite`/server dev-process backgrounding**: same gotcha as prior sessions — `npm run dev` must be its own top-level backgrounded Bash call, nothing else in the command. After `TaskStop`, the underlying Windows process sometimes keeps the port held (npm's child process not reaped) — confirmed via `Get-NetTCPConnection -LocalPort <port> -State Listen` and force-killed the owning PID with `Stop-Process` when that happened.
+- **Event-item background token mix-up caught before review**: the design mock's `.event-item` uses `var(--bg)` (white, `--color-surface`), not `var(--bg2)` (`--color-surface-secondary`/page background) — initially wrote `bg-background` by mistake, caught by re-checking the mock's `:root` variable mapping and fixed to `bg-surface` before verification.
+- **`rounded-md` vs. `rounded-lg` looked like inconsistency with `TrendCard`/`ScriptCard`** — verified against the design's raw CSS (`.event-item`/`.cal-day`/`.cal-nav button` all specify `var(--radius-md)`, while `.trend-card`/`.script-card` specify `var(--radius-lg)`) and confirmed it's the design's own intentional distinction between list-rows and grid-tiles, not drift. Documented in `ui-registry.md` so a future review doesn't re-flag it.
+- **Playwright browser/module-resolution setup**: same pattern as prior sessions — `npx playwright install chromium` (already cached from feature 06/10), scripts copied into the `npx` cache dir (`~/AppData/Local/npm-cache/_npx/<hash>/`) before running so ESM `import "playwright"` resolves; running from an arbitrary cwd fails with `ERR_MODULE_NOT_FOUND`.
+- **`curl http://localhost:3001/health` intermittently failed while the server was actually up** — resolved by using `127.0.0.1` instead of `localhost` (an IPv4/IPv6 resolution quirk in this shell, not a real server issue); confirmed via `netstat`/`Get-NetTCPConnection` that the port was genuinely listening.
 
 ## Current state
 
-- **Feature 11 complete: built, imprinted, reviewed, all findings fixed, verified live at every stage** — reel generation, caption generation (3 real variants), and a smalltalk greeting all tested via `curl` through the real compiled graph; Playwright pass against the real dashboard confirmed chat generation, `/scripts` rendering real data, script-card chip → chat prefill → clear-on-reload, and **`/trends` re-verified unaffected by the `Chip`/`useChatPrompt` refactor** (the specific regression check the developer asked for). Zero console/page errors throughout. `tsc -b --noEmit` clean on both `server/` and `client/`.
-- **Repo state:** branch `contentAgent`, commit `47164f7` at HEAD (developer's own commit, initial build — 20 files), plus uncommitted changes on top from the `/review` fix round: `server/src/agents/content-agent.ts`, `server/src/routes/scripts.ts`, `context/architecture.md`, `context/progress-tracker.md`. **Developer commits their own work** — no commit made by me this session.
-- Dev servers (server on 3001, client/Vite on 5173) were started twice this session (initial verification, then re-verification after the review fixes) and explicitly stopped + force-killed both times; ports confirmed free at session end.
-- A PR summary (major changes + a server/client-folder-only file list) was requested and produced this session — see the conversation for the exact text, not duplicated here.
+- **Feature 12 complete: built, imprinted, reviewed, 0 issues found, verified live at every stage.** Playwright confirmed the panel at all 3 responsive breakpoints against `glam-ai.html` with zero console/page errors, and confirmed the "+ Add event ↗" chip prefills chat and clears correctly on reload (same check pattern as Trends/Scripts). `tsc -b --noEmit` clean on `client/`.
+- **Repo state:** branch `calendarPanel`, commit `98d176a` at HEAD, working tree clean — developer committed their own work, no commit made by me.
+- Dev servers (server on 3001, client/Vite on 5173) were started for verification and explicitly stopped afterward; ports confirmed free at session end.
+- One informational note carried into `progress-tracker.md` (not an issue): mock event dates are fixed to August 2026 to align with "today" at build time and will read as stale once real time passes into a different month — expected of static mock data, resolved when feature 13 wires in real Google Calendar reads.
 
 ## Next session starts with
 
-Confirm the review-fix-round commit is in and the repo is clean, then proceed to **Feature 12 — Calendar Panel — Full UI (Mock)**: month grid + event list matching `context/designs/glam-ai.html`, today highlighted, event dots, an "Add event" chip present with no write yet (calendar reads/writes come in features 13–14). Run `/architect` first per the project's loop.
+**Feature 13 — Calendar Read**: `server/src/services/google-calendar.ts` (`listUpcomingEvents`), `calendar-agent.ts`'s `calendar_read` intent (real events → WhatsApp-friendly summary), `GET /api/calendar` feeding this same panel. Run `/architect` first per the project's loop — the panel built this session is the target UI, no rebuilding needed, just wiring real data in. Feature 13 will also need to decide how a real Google Calendar event maps to one of `EventItem`'s 4 dot colors, since the real `events` schema has no category/color field (flagged in this session's Decisions).
 
 ## Open questions
 
-- Whether `YOUTUBE_API_KEY` quota usage from repeated live verification runs across sessions is a concern — informational only, no action taken.
-- `@langchain/google` still pre-1.0 (0.2.x) and `@langchain/core` is at 1.2.1 — flagged previously for a stability re-check during the pre-production multi-provider hardening pass. Still no action needed yet.
-- The `getStoredScripts()`/`getStoredTrends()` boundary pattern (routes call an exported agent-module function, never raw `collections.*`) is now used twice — worth keeping in mind as a standing convention for any future `routes/*.ts` file (calendar, DMs, contracts), not just documented after the fact each time.
+- How feature 13 will derive `EventItem`'s dot `color` from real Google Calendar data (no color/category field exists on the real event yet) — needs a decision during that feature's `/architect`.
+- Whether `YOUTUBE_API_KEY` quota usage from repeated live verification runs is a concern — informational only, carried over from feature 11, still no action taken.
+- `@langchain/google` still pre-1.0 (0.2.x) — flagged previously for a stability re-check during the pre-production multi-provider hardening pass. Still no action needed yet.
+
+---
+
+## PR Summary — Feature 12: Calendar Panel (Full UI, Mock)
+
+**What this PR does:** Adds the Calendar dashboard panel — a month grid (today highlighted, event dots) plus a sorted event list, matching `context/designs/glam-ai.html`. Built against mock data only; no Google Calendar integration yet (that's feature 13). Replaces the `ComingSoonPanel` placeholder that was standing in for `/calendar`.
+
+**Major changes:**
+- New `CalendarEvent` mock data type and 4 sample events.
+- New `CalendarGrid` component — real-date-driven month/today computation (not a hardcoded date), event-dot indicators, non-functional (visual-only) month navigation.
+- New `EventItem` component — dot + title + derived date/time/location line, including "All day" formatting.
+- `CalendarPage` rewritten to assemble the above plus an "Add event" chip that prefills the AI chat (does not write an event — matches the project's calendar-write-requires-approval rule, real add flow lands in feature 14).
+- `ui-registry.md` updated with both new component patterns.
+
+**Files changed (client/ and server/ only):**
+- `client/src/lib/mock-events.ts` (new)
+- `client/src/components/calendar/CalendarGrid.tsx` (new)
+- `client/src/components/calendar/EventItem.tsx` (new)
+- `client/src/pages/CalendarPage.tsx` (modified — replaced placeholder)
+
+No `server/` files changed this feature.
