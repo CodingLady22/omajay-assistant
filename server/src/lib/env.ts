@@ -65,7 +65,10 @@ export const getYouTubeEnv = lazyEnv(
 export const getGoogleCalendarEnv = lazyEnv(
   "lib/env:google-calendar",
   z.object({
+    // A service-account JSON key, either inline (a JSON string starting with
+    // "{") or a file path to it — see services/google-calendar.ts's loader.
     GOOGLE_CALENDAR_CREDENTIALS: z.string().min(1),
+    GOOGLE_CALENDAR_ID: z.string().min(1),
   })
 );
 

@@ -4,6 +4,7 @@ import { createStandardIndexes } from "@/db/indexes";
 import { registerJobs } from "@/jobs/scheduler";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
+import calendarRouter from "@/routes/calendar";
 import chatRouter from "@/routes/chat";
 import scriptsRouter from "@/routes/scripts";
 import trendsRouter from "@/routes/trends";
@@ -24,6 +25,7 @@ async function bootstrap(): Promise<void> {
   app.use("/api/chat", chatRouter);
   app.use("/api/trends", trendsRouter);
   app.use("/api/scripts", scriptsRouter);
+  app.use("/api/calendar", calendarRouter);
 
   app.listen(env.PORT, () => {
     logger.info("index", `Server listening on port ${env.PORT}`);
