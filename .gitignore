@@ -1,0 +1,8 @@
+# Live credentials — never commit
+service-account-key.json
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store

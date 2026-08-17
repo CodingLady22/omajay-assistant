@@ -1,4 +1,4 @@
-import type { Script, Trend } from "@/lib/types";
+import type { CalendarEvent, Script, Trend } from "@/lib/types";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -32,4 +32,8 @@ export async function getTrends(): Promise<ApiResponse<Trend[]>> {
 
 export async function getScripts(): Promise<ApiResponse<Script[]>> {
   return request("/api/scripts");
+}
+
+export async function getCalendarEvents(): Promise<ApiResponse<CalendarEvent[]>> {
+  return request("/api/calendar");
 }

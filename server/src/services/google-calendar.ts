@@ -7,6 +7,7 @@ import type { GoogleCalendarEvent } from "@/types";
 
 const SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"];
 const DEFAULT_DAYS = 14;
+const MAX_EVENTS = 50;
 
 const serviceAccountSchema = z
   .object({
@@ -24,11 +25,22 @@ function loadServiceAccountCredentials(raw: string): z.infer<typeof serviceAccou
   return serviceAccountSchema.parse(JSON.parse(jsonText));
 }
 
+// Google's spec guarantees every start/end carries exactly one of date or
+// dateTime, but nothing stops a malformed payload from having neither — the
+// refine rejects that case at safeParse, the same skip path every other
+// malformed event already goes through, rather than letting a later step
+// assert a value the schema itself allows to be absent.
+const eventTimeShape = z.object({ date: z.string().optional(), dateTime: z.string().optional() });
+const eventTimeSchema = eventTimeShape.refine((time) => Boolean(time.date) || Boolean(time.dateTime), {
+  message: "Event time must specify either date or dateTime",
+});
+type EventTime = z.infer<typeof eventTimeShape>;
+
 const googleEventSchema = z.object({
   id: z.string(),
   summary: z.string().optional(),
-  start: z.object({ date: z.string().optional(), dateTime: z.string().optional() }),
-  end: z.object({ date: z.string().optional(), dateTime: z.string().optional() }),
+  start: eventTimeSchema,
+  end: eventTimeSchema,
   location: z.string().optional(),
   status: z.string().optional(),
 });
@@ -42,10 +54,23 @@ function lastAllDayDate(endDateExclusive: string): string {
   return date.toISOString().slice(0, 10);
 }
 
+function extractTime(time: EventTime): { value: string; isAllDay: boolean } {
+  if (time.dateTime) {
+    return { value: time.dateTime, isAllDay: false };
+  }
+  if (time.date) {
+    return { value: time.date, isAllDay: true };
+  }
+  // Unreachable: eventTimeSchema's refine already rejects any event time
+  // missing both date and dateTime before normalizeEvent ever runs.
+  return { value: "", isAllDay: true };
+}
+
 function normalizeEvent(raw: z.infer<typeof googleEventSchema>): GoogleCalendarEvent {
-  const isAllDay = Boolean(raw.start.date && !raw.start.dateTime);
-  const start = isAllDay ? `${raw.start.date}T00:00:00` : (raw.start.dateTime as string);
-  const end = isAllDay ? `${lastAllDayDate(raw.end.date as string)}T23:59:00` : (raw.end.dateTime as string);
+  const startInfo = extractTime(raw.start);
+  const endInfo = extractTime(raw.end);
+  const start = startInfo.isAllDay ? `${startInfo.value}T00:00:00` : startInfo.value;
+  const end = startInfo.isAllDay ? `${lastAllDayDate(endInfo.value)}T23:59:00` : endInfo.value;
   const status = raw.status === "tentative" || raw.status === "cancelled" ? raw.status : "confirmed";
 
   return {
@@ -74,7 +99,7 @@ export async function listUpcomingEvents(days: number = DEFAULT_DAYS): Promise<G
       timeMax: timeMax.toISOString(),
       singleEvents: true,
       orderBy: "startTime",
-      maxResults: 50,
+      maxResults: MAX_EVENTS,
     });
 
     const events: GoogleCalendarEvent[] = [];

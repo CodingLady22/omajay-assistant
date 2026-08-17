@@ -1,4 +1,4 @@
-import type { CalendarEvent, EventColor } from "@/lib/mock-events";
+import type { CalendarEvent, EventColor } from "@/lib/types";
 
 type Props = {
   event: CalendarEvent;

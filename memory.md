@@ -1,69 +1,90 @@
-# Memory — Feature 12: Calendar Panel — Full UI (Mock)
+# Memory — Feature 13: Calendar Read
 
 Last updated: 2026-08-16
 
 ## What was built
 
-**Feature 12, built via `/architect` → build → `/imprint` → `/review` (1 pass, 0 issues — shipped clean first pass).** Branch `calendarPanel`, off `main` (post-feature-11 merge, PR #11). Developer committed the full build themselves as `98d176a` ("feat: build mock UI for calendar") — **developer commits their own work in this project**, no commit made by me.
+**Feature 13, built via `/architect` → build → `/review` (2 passes — pre-fix and post-fix, both live) → tick progress-tracker.** Branch `calendarRead`, off `main` (post-feature-12 merge, PR #12). Real Google Calendar integration replacing feature 12's mock data.
 
-- `client/src/lib/mock-events.ts` — new. `CalendarEvent` type (`id`, `title`, `start`, `end`, `location`, `color`, `status`) mirroring the server `events` collection schema (architecture.md) plus a client-only `color` field the real schema doesn't have yet. 4 mock entries dated across August 2026 (Lumière shoot, podcast interview, content filming day, Velour brand call).
-- `client/src/components/calendar/CalendarGrid.tsx` — new. Computes month/today from the real current date (`new Date()`), not a hardcoded date. 7-col Mon-first grid, today cell styled with the same `bg-pink-light text-pink` active triple used elsewhere, pink dot on any day with an event. Prev/next chevrons render matching the design exactly but are `disabled`, no handler.
-- `client/src/components/calendar/EventItem.tsx` — new. Dot + title + derived meta line (`Wed 3 Aug · 10:00–14:00 · Milan Studio`, or `All day` when start is 00:00 and end is 23:59). Dot color pulls from the existing closed token palette (`pink`/`coral`/`success`/`info`), not two new tokens the mock's raw hex would have implied.
-- `client/src/pages/CalendarPage.tsx` — rewritten, replacing `ComingSoonPanel`. Renders `CalendarGrid` + sorted event list (keyed on `event.id`) + a `+ Add event ↗` chip via `useChatPrompt()` — prefills chat, never writes directly (hard safety rule).
-- `context/ui-registry.md` — `/imprint`: new `CalendarGrid` and `EventItem` entries, including a note that `EventItem`'s `rounded-md` (vs. `TrendCard`/`ScriptCard`'s `rounded-lg`) matches the design mock's own CSS exactly and isn't drift.
-- `context/progress-tracker.md` — feature 12 ticked, phase still 5, full Decisions/Notes trail recorded.
-
-No server changes this feature — pure client mock, same shape as features 06/10 before their real-data companions.
+- `server/src/services/google-calendar.ts` — new. Service-account auth via `googleapis`; `listUpcomingEvents(days = 14)`. Credential loader (`loadServiceAccountCredentials`) tolerates **both** a file path and an inline JSON string (detects a leading `{`) — local dev uses a file path, some production hosts have no filesystem for a key file. `eventTimeSchema` has a zod `.refine()` rejecting any event `start`/`end` missing both `date` and `dateTime` at `safeParse` — malformed events get skipped the same way every other malformed field already does. `extractTime()` narrows the validated union without any `as` assertion (see Problems Solved). Read-only scope (`calendar.readonly`) — feature 14 will need to widen this for writes.
+- `server/src/agents/calendar-agent.ts` — rewritten. `getUpcomingEvents()` (exported, reused by both the route and the chat path — same pattern as `getStoredTrends()`), `buildEventsSummary()` (deterministic text, no LLM call needed), `calendarAgent()` branches on `state.intent`: `calendar_read` does real work, `calendar_add` still returns its original feature-03 stub untouched.
+- `server/src/routes/calendar.ts` — new. `GET /api/calendar` calls into the agent module (not a raw service call), matching the `routes/trends.ts` → `getStoredTrends()` boundary precedent.
+- `server/src/index.ts` — new router mounted at `/api/calendar`.
+- `server/src/lib/env.ts` — `GOOGLE_CALENDAR_ID` added to `getGoogleCalendarEnv()`.
+- `server/src/types/index.ts` — `GoogleCalendarEvent` (raw service shape), `EventColor`, `CalendarEventView` (the `GET /api/calendar` response shape) added.
+- `server/src/services/run-calendar-test.ts` — new, permanent `npm run calendar:test` script (mirrors `trends:test`/`jobs:test`). Inserts a real timed event **and** a real all-day event via elevated write-scope test-only calls, confirms both are read back correctly through the actual readonly service, then deletes them.
+- `server/package.json` — `googleapis` added as a dependency.
+- `server/.env.example` — `GOOGLE_CALENDAR_ID` documented; credentials comment updated to note file-path-or-inline-JSON.
+- Client: `client/src/lib/types.ts` (`CalendarEvent`/`EventColor` consolidated in, mirroring how features 08/11 handled `Trend`/`Script`), `client/src/lib/mock-events.ts` deleted, `client/src/lib/api.ts` (`getCalendarEvents()` added), `CalendarGrid.tsx`/`EventItem.tsx` (import path only, no visual change), `CalendarPage.tsx` (rewritten — real fetch with loading/error states matching `TrendsPage.tsx`'s exact pattern, redundant client-side sort removed since the server already returns pre-sorted data).
+- Root `.gitignore` — new (didn't exist before). Covers `service-account-key.json`, which lives at the repo root — `server/.gitignore` already listed the filename but that rule only reaches paths under `server/`.
+- `context/progress-tracker.md` — feature 13 ticked, full Decisions/Notes trail recorded (not part of the PR's server/client file list below, but worth knowing it's updated).
 
 ## Decisions made
 
-- **Month/today computed from the real current date**, not the design mock's static "June 2026" — `/architect`-confirmed, since a "today highlighted" feature only makes sense against the actual day.
-- **Event dot colors reuse the existing 4-token palette** (`pink`/`coral`/`success`/`info`) instead of adding two new near-duplicate green/blue tokens to match the mock's exact `#639922`/`#378ADD` — keeps `ui-tokens.md`'s palette closed. `color` is a client-only mock field; feature 13 must decide how a real Google Calendar read maps to one of these four.
-- **Prev/next month chevrons render but are non-functional** (`disabled`, no handler) — real navigation deferred to feature 13 rather than building throwaway state against mock-only data.
-- **`CalendarEvent` carries a stable `id` field from the start**, keyed on directly — explicit developer instruction during `/architect`, learned from feature 10's title-keying issue, so feature 13's real-data wiring won't repeat it.
-- **`CalendarEvent.status` carried for schema fidelity**, unused/unrendered — same convention `Trend`/`Script` used before their real-data features.
+- **No caching into the `events` Mongo collection — `GET /api/calendar` and the chat path both read live from Google every time.** A calendar read is one cheap API call with no LLM step to amortize (unlike trends' 3-API + LLM-scoring pipeline); `events` stays reserved for proposed/confirmed writes only (feature 14).
+- **`EventItem`'s dot color always defaults to `pink` for real events** — no field in Google Calendar's data maps to the 4-token palette unless she manually color-codes events there, which can't be assumed. Closes the open question feature 12 left behind.
+- **Fixed 14-day window, no natural-language date-range parsing.** "What's on this week?" and "what's on today?" return the same list — kept deterministic and LLM-free, out of scope for this feature.
+- **Credential loader tolerates both a file path and inline JSON** — explicit developer requirement (mid-session correction) so switching to an env-string on a filesystem-less production host later needs zero code changes, just an env var swap.
+- **`calendar_add` intent is untouched** — still returns its original stub; feature 14 owns the propose-then-confirm write flow.
 
 ## Problems solved
 
-- **Event-item background token mix-up caught before review**: the design mock's `.event-item` uses `var(--bg)` (white, `--color-surface`), not `var(--bg2)` (`--color-surface-secondary`/page background) — initially wrote `bg-background` by mistake, caught by re-checking the mock's `:root` variable mapping and fixed to `bg-surface` before verification.
-- **`rounded-md` vs. `rounded-lg` looked like inconsistency with `TrendCard`/`ScriptCard`** — verified against the design's raw CSS (`.event-item`/`.cal-day`/`.cal-nav button` all specify `var(--radius-md)`, while `.trend-card`/`.script-card` specify `var(--radius-lg)`) and confirmed it's the design's own intentional distinction between list-rows and grid-tiles, not drift. Documented in `ui-registry.md` so a future review doesn't re-flag it.
-- **Playwright browser/module-resolution setup**: same pattern as prior sessions — `npx playwright install chromium` (already cached from feature 06/10), scripts copied into the `npx` cache dir (`~/AppData/Local/npm-cache/_npx/<hash>/`) before running so ESM `import "playwright"` resolves; running from an arbitrary cwd fails with `ERR_MODULE_NOT_FOUND`.
-- **`curl http://localhost:3001/health` intermittently failed while the server was actually up** — resolved by using `127.0.0.1` instead of `localhost` (an IPv4/IPv6 resolution quirk in this shell, not a real server issue); confirmed via `netstat`/`Get-NetTCPConnection` that the port was genuinely listening.
+- **`service-account-key.json` (repo root) was not actually gitignored.** `server/.gitignore` listed the filename, but `.gitignore` rules in a subdirectory only reach that subdirectory's tree — the key file sits one level above `server/`. Confirmed via `git check-ignore -v` (no match) and `git status` (showed as untracked/exposed). Fixed by adding a root-level `.gitignore`. Re-confirmed ignored afterward.
+- **`GOOGLE_CALENDAR_CREDENTIALS` path was relative to the wrong cwd.** It was set to `./service-account-key.json`, but `npm run dev`'s cwd is `server/`, and the key file is one level above that — fixed to `../service-account-key.json`.
+- **Uncommented `as string` type assertions in `normalizeEvent`** (found during `/review`) were both a code-standards violation (zero precedent anywhere else in `server/src`, confirmed via a full grep) and a latent bug: the zod schema at the time allowed an event's `start`/`end` to have neither `date` nor `dateTime`, so the assertion could let `undefined` silently flow through typed as `string`, producing "Invalid Date" downstream instead of being skipped like every other malformed event. Fixed with a zod `.refine()` on `eventTimeSchema` (rejects the missing-both case at `safeParse`) plus a control-flow-narrowing `extractTime()` helper — its truthy checks exactly mirror the refine's `Boolean()` checks, so the one remaining fallback branch is provably unreachable. Verified live against a real all-day event (previously the untested path).
+- **Vite binds to IPv6 loopback (`[::1]:5173`) by default, not `127.0.0.1`.** Playwright screenshot script had to target `http://localhost:5173`, not `127.0.0.1` — the inverse of the `127.0.0.1`-over-`localhost` fix from feature 12's session; both quirks are shell/tool-specific, not real server issues.
+- **Background dev-server processes survived `TaskStop` calls** — the npm parent process was stopped but the underlying `tsx watch`/`vite` child kept the port bound. Had to `netstat -ano` for the actual listening PID and `taskkill //PID <pid> //F` directly.
 
 ## Current state
 
-- **Feature 12 complete: built, imprinted, reviewed, 0 issues found, verified live at every stage.** Playwright confirmed the panel at all 3 responsive breakpoints against `glam-ai.html` with zero console/page errors, and confirmed the "+ Add event ↗" chip prefills chat and clears correctly on reload (same check pattern as Trends/Scripts). `tsc -b --noEmit` clean on `client/`.
-- **Repo state:** branch `calendarPanel`, commit `98d176a` at HEAD, working tree clean — developer committed their own work, no commit made by me.
-- Dev servers (server on 3001, client/Vite on 5173) were started for verification and explicitly stopped afterward; ports confirmed free at session end.
-- One informational note carried into `progress-tracker.md` (not an issue): mock event dates are fixed to August 2026 to align with "today" at build time and will read as stale once real time passes into a different month — expected of static mock data, resolved when feature 13 wires in real Google Calendar reads.
+- **Feature 13 complete: built, reviewed twice (pre-fix: 1 Important + 2 Minor found; post-fix: re-reviewed and re-verified live, 0 remaining issues), ready to ship.** `tsc -b --noEmit` clean on both `server/` and `client/`. Playwright confirmed `/calendar` at all 3 responsive breakpoints against real data — zero console/page errors both before and after the fix pass.
+- Live-verified end to end multiple times: real timed + all-day events inserted via elevated test-only calls, read back correctly through the actual readonly service, then deleted (calendar left empty each time — no leftover test data). `GET /api/calendar` and the `calendar_read` chat path both confirmed against real data; `calendar_add` confirmed still returns its unchanged stub.
+- **Repo state:** branch `calendarRead`. Developer committed the pre-fix server-side work themselves as `7f5fb09` ("feat: build read feature for calendar agent"). Client-side files, `context/progress-tracker.md`, the new root `.gitignore`, and the post-review fixes to `google-calendar.ts`/`run-calendar-test.ts` are still **uncommitted** — working tree is not clean. Developer commits their own work in this project; no commit made by me this session.
+- Dev servers stopped, ports confirmed free at session end.
 
 ## Next session starts with
 
-**Feature 13 — Calendar Read**: `server/src/services/google-calendar.ts` (`listUpcomingEvents`), `calendar-agent.ts`'s `calendar_read` intent (real events → WhatsApp-friendly summary), `GET /api/calendar` feeding this same panel. Run `/architect` first per the project's loop — the panel built this session is the target UI, no rebuilding needed, just wiring real data in. Feature 13 will also need to decide how a real Google Calendar event maps to one of `EventItem`'s 4 dot colors, since the real `events` schema has no category/color field (flagged in this session's Decisions).
+**Feature 14 — Calendar Add (Propose Then Confirm)**: parse a natural-language event request into a `proposed` row in the `events` collection (not written to Google yet), reply asking for confirmation; `POST /api/calendar/confirm` writes to Google Calendar via a new `createEvent` in `google-calendar.ts` (this is where the service's OAuth scope needs to widen from `calendar.readonly` to full `calendar` access) and flips status to `confirmed`. Run `/architect` first per the project's loop.
 
 ## Open questions
 
-- How feature 13 will derive `EventItem`'s dot `color` from real Google Calendar data (no color/category field exists on the real event yet) — needs a decision during that feature's `/architect`.
-- Whether `YOUTUBE_API_KEY` quota usage from repeated live verification runs is a concern — informational only, carried over from feature 11, still no action taken.
-- `@langchain/google` still pre-1.0 (0.2.x) — flagged previously for a stability re-check during the pre-production multi-provider hardening pass. Still no action needed yet.
+- Whether the calendar currently used for dev/testing (a service account's own calendar, set up as a "tester") will be swapped for Sofia's real shared calendar before production, or is the intended long-term setup — not addressed this session, worth confirming before feature 14 starts writing real events.
+- Feature 14 needs `google-calendar.ts`'s scope widened from readonly to full `calendar` access — not built yet, just noted.
+- `@langchain/google` still pre-1.0 (0.2.x) — carried over from earlier sessions, still no action needed yet.
 
 ---
 
-## PR Summary — Feature 12: Calendar Panel (Full UI, Mock)
+## PR Summary — Feature 13: Calendar Read
 
-**What this PR does:** Adds the Calendar dashboard panel — a month grid (today highlighted, event dots) plus a sorted event list, matching `context/designs/glam-ai.html`. Built against mock data only; no Google Calendar integration yet (that's feature 13). Replaces the `ComingSoonPanel` placeholder that was standing in for `/calendar`.
+**What this PR does:** Replaces feature 12's mock Calendar panel data with a real, read-only Google Calendar integration. `calendar_read` (chat/WhatsApp) and `GET /api/calendar` (dashboard) both now return Sofia's real upcoming events via a service-account-authenticated Google Calendar API read, always fetched live (no caching). `calendar_add` is untouched — still a stub, that's feature 14.
 
 **Major changes:**
-- New `CalendarEvent` mock data type and 4 sample events.
-- New `CalendarGrid` component — real-date-driven month/today computation (not a hardcoded date), event-dot indicators, non-functional (visual-only) month navigation.
-- New `EventItem` component — dot + title + derived date/time/location line, including "All day" formatting.
-- `CalendarPage` rewritten to assemble the above plus an "Add event" chip that prefills the AI chat (does not write an event — matches the project's calendar-write-requires-approval rule, real add flow lands in feature 14).
-- `ui-registry.md` updated with both new component patterns.
+- New `services/google-calendar.ts` — service-account auth (file-path or inline-JSON credential, tolerant of both), `listUpcomingEvents(days = 14)`, zod-validated with a refine that rejects events missing both `date` and `dateTime` on start/end.
+- `calendar-agent.ts` rewritten — real `calendar_read` (fetch, map, deterministic WhatsApp-friendly summary), `calendar_add` stub left unchanged.
+- New `GET /api/calendar` route, mounted in `index.ts`.
+- New permanent live-verification script (`npm run calendar:test`) — inserts/reads/deletes both a timed and an all-day test event against the real API.
+- Client `CalendarEvent` type consolidated into `lib/types.ts` (mock file deleted); `CalendarPage` wired to real data with loading/error states; dot color defaults to brand pink for all real events (no per-event category signal exists in Google's data).
+- Fixed during review: replaced uncommented `as` type assertions with a schema-level guarantee + type-narrowing helper (closes a latent "Invalid Date" risk for malformed events); named a magic number constant; removed a redundant client-side sort.
 
-**Files changed (client/ and server/ only):**
-- `client/src/lib/mock-events.ts` (new)
-- `client/src/components/calendar/CalendarGrid.tsx` (new)
-- `client/src/components/calendar/EventItem.tsx` (new)
-- `client/src/pages/CalendarPage.tsx` (modified — replaced placeholder)
+**Files changed:**
 
-No `server/` files changed this feature.
+*server/*
+- `server/src/services/google-calendar.ts` (new)
+- `server/src/services/run-calendar-test.ts` (new)
+- `server/src/routes/calendar.ts` (new)
+- `server/src/agents/calendar-agent.ts` (modified — rewritten)
+- `server/src/index.ts` (modified — router mounted)
+- `server/src/lib/env.ts` (modified — `GOOGLE_CALENDAR_ID` added)
+- `server/src/types/index.ts` (modified — `GoogleCalendarEvent`, `EventColor`, `CalendarEventView` added)
+- `server/.env.example` (modified)
+- `server/.gitignore` (modified)
+- `server/package.json` (modified — `googleapis` added)
+- `server/package-lock.json` (modified)
+
+*client/*
+- `client/src/lib/types.ts` (modified — `CalendarEvent`/`EventColor` added)
+- `client/src/lib/api.ts` (modified — `getCalendarEvents()` added)
+- `client/src/lib/mock-events.ts` (deleted)
+- `client/src/components/calendar/CalendarGrid.tsx` (modified — import path only)
+- `client/src/components/calendar/EventItem.tsx` (modified — import path only)
+- `client/src/pages/CalendarPage.tsx` (modified — rewritten for real data)
