@@ -8,6 +8,7 @@
     "db:setup-search-index": "tsx src/db/run-setup-search-index.ts",
     "graph:test": "tsx src/agents/run-graph-test.ts",
     "trends:test": "tsx src/services/run-trends-test.ts",
+    "calendar:test": "tsx src/services/run-calendar-test.ts",
     "jobs:test": "tsx src/jobs/run-daily-trends-test.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -22,6 +23,7 @@
     "@langchain/langgraph": "^1.4.5",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "googleapis": "^174.0.1",
     "mongodb": "^7.3.0",
     "node-cron": "^4.6.0",
     "zod": "^4.4.3"

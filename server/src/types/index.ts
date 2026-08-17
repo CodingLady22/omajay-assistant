@@ -54,6 +54,18 @@ export type TikTokTrend = {
   viewCount: number;
 };
 
+// Raw shape returned by services/google-calendar.ts — start/end are already
+// normalized to ISO datetime strings (all-day events get 00:00/23:59), but
+// status/cancellation filtering is left to the agent, same split as trends.
+export type GoogleCalendarEvent = {
+  id: string;
+  title: string;
+  start: string;
+  end: string;
+  location: string;
+  status: "confirmed" | "tentative" | "cancelled";
+};
+
 export type ScriptStatus = "draft" | "posted";
 
 type ScriptCommon = {
@@ -108,6 +120,23 @@ export type EventDoc = {
   location?: string;
   status: "confirmed" | "proposed";
   created_at: Date;
+};
+
+export type EventColor = "pink" | "coral" | "success" | "info";
+
+// The shape GET /api/calendar and calendar-agent.ts's chat path both use.
+// Read-only (feature 13) — never persisted to `events`, which stays reserved
+// for proposed/confirmed writes (feature 14). `color` has no real-data source
+// yet (Google events carry no field matching our 4-token palette) so it's
+// always "pink" for now — see progress-tracker.md's feature 13 decisions.
+export type CalendarEventView = {
+  id: string;
+  title: string;
+  start: string;
+  end: string;
+  location: string;
+  color: EventColor;
+  status: "confirmed" | "proposed";
 };
 
 export type DocumentChunk = {

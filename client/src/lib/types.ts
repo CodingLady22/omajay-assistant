@@ -51,3 +51,19 @@ export type CarouselScript = ScriptCommon & {
 // Mirrors server/src/types/index.ts's `ScriptDoc` (the `scripts` collection schema)
 // as it arrives over JSON — same discriminated-union shape, _id/created_at as strings.
 export type Script = ReelScript | CaptionScript | CarouselScript;
+
+export type EventColor = "pink" | "coral" | "success" | "info";
+
+// Mirrors server/src/types/index.ts's `CalendarEventView` (GET /api/calendar's
+// response shape) — read-only, not the `events` collection schema itself.
+// `color` is always "pink" for real events (no per-event category signal
+// exists in Google Calendar data yet) — see progress-tracker.md, feature 13.
+export type CalendarEvent = {
+  id: string;
+  title: string;
+  start: string;
+  end: string;
+  location: string;
+  color: EventColor;
+  status: "confirmed" | "proposed";
+};

@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import type { CalendarEvent } from "@/lib/mock-events";
+import type { CalendarEvent } from "@/lib/types";
 
 type Props = {
   events: CalendarEvent[];
