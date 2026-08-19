@@ -37,3 +37,17 @@ export async function getScripts(): Promise<ApiResponse<Script[]>> {
 export async function getCalendarEvents(): Promise<ApiResponse<CalendarEvent[]>> {
   return request("/api/calendar");
 }
+
+export async function confirmCalendarEvent(eventId: string): Promise<ApiResponse<CalendarEvent>> {
+  return request("/api/calendar/confirm", {
+    method: "POST",
+    body: JSON.stringify({ eventId }),
+  });
+}
+
+export async function discardCalendarEvent(eventId: string): Promise<ApiResponse<null>> {
+  return request("/api/calendar/discard", {
+    method: "POST",
+    body: JSON.stringify({ eventId }),
+  });
+}

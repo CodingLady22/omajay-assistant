@@ -9,6 +9,7 @@
     "graph:test": "tsx src/agents/run-graph-test.ts",
     "trends:test": "tsx src/services/run-trends-test.ts",
     "calendar:test": "tsx src/services/run-calendar-test.ts",
+    "calendar-add:test": "tsx src/agents/run-calendar-add-test.ts",
     "jobs:test": "tsx src/jobs/run-daily-trends-test.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

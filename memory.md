@@ -1,90 +1,79 @@
-# Memory — Feature 13: Calendar Read
+# Memory — Feature 14: Calendar Add (Propose Then Confirm)
 
-Last updated: 2026-08-16
+Last updated: 2026-08-19
 
 ## What was built
 
-**Feature 13, built via `/architect` → build → `/review` (2 passes — pre-fix and post-fix, both live) → tick progress-tracker.** Branch `calendarRead`, off `main` (post-feature-12 merge, PR #12). Real Google Calendar integration replacing feature 12's mock data.
+**Feature 14, built via `/architect` → build → `/review` (found 1 Important + 1 Minor, both fixed and re-verified live) → tick progress-tracker.** Branch `calendarAdd`, off `main` (post-feature-13 merge, PR #13). `calendar_add` is now real: she asks in chat, gets a `proposed` row in Mongo (never touched Google), then confirms or discards from the dashboard.
 
-- `server/src/services/google-calendar.ts` — new. Service-account auth via `googleapis`; `listUpcomingEvents(days = 14)`. Credential loader (`loadServiceAccountCredentials`) tolerates **both** a file path and an inline JSON string (detects a leading `{`) — local dev uses a file path, some production hosts have no filesystem for a key file. `eventTimeSchema` has a zod `.refine()` rejecting any event `start`/`end` missing both `date` and `dateTime` at `safeParse` — malformed events get skipped the same way every other malformed field already does. `extractTime()` narrows the validated union without any `as` assertion (see Problems Solved). Read-only scope (`calendar.readonly`) — feature 14 will need to widen this for writes.
-- `server/src/agents/calendar-agent.ts` — rewritten. `getUpcomingEvents()` (exported, reused by both the route and the chat path — same pattern as `getStoredTrends()`), `buildEventsSummary()` (deterministic text, no LLM call needed), `calendarAgent()` branches on `state.intent`: `calendar_read` does real work, `calendar_add` still returns its original feature-03 stub untouched.
-- `server/src/routes/calendar.ts` — new. `GET /api/calendar` calls into the agent module (not a raw service call), matching the `routes/trends.ts` → `getStoredTrends()` boundary precedent.
-- `server/src/index.ts` — new router mounted at `/api/calendar`.
-- `server/src/lib/env.ts` — `GOOGLE_CALENDAR_ID` added to `getGoogleCalendarEnv()`.
-- `server/src/types/index.ts` — `GoogleCalendarEvent` (raw service shape), `EventColor`, `CalendarEventView` (the `GET /api/calendar` response shape) added.
-- `server/src/services/run-calendar-test.ts` — new, permanent `npm run calendar:test` script (mirrors `trends:test`/`jobs:test`). Inserts a real timed event **and** a real all-day event via elevated write-scope test-only calls, confirms both are read back correctly through the actual readonly service, then deletes them.
-- `server/package.json` — `googleapis` added as a dependency.
-- `server/.env.example` — `GOOGLE_CALENDAR_ID` documented; credentials comment updated to note file-path-or-inline-JSON.
-- Client: `client/src/lib/types.ts` (`CalendarEvent`/`EventColor` consolidated in, mirroring how features 08/11 handled `Trend`/`Script`), `client/src/lib/mock-events.ts` deleted, `client/src/lib/api.ts` (`getCalendarEvents()` added), `CalendarGrid.tsx`/`EventItem.tsx` (import path only, no visual change), `CalendarPage.tsx` (rewritten — real fetch with loading/error states matching `TrendsPage.tsx`'s exact pattern, redundant client-side sort removed since the server already returns pre-sorted data).
-- Root `.gitignore` — new (didn't exist before). Covers `service-account-key.json`, which lives at the repo root — `server/.gitignore` already listed the filename but that rule only reaches paths under `server/`.
-- `context/progress-tracker.md` — feature 13 ticked, full Decisions/Notes trail recorded (not part of the PR's server/client file list below, but worth knowing it's updated).
+- `server/src/services/google-calendar.ts` — scope widened from `calendar.readonly` to full `https://www.googleapis.com/auth/calendar`; `createEvent(event: NewEvent): Promise<string>` added (builds `{dateTime, timeZone}` start/end, calls `calendar.events.insert`, throws — does not degrade — on failure or a missing returned id).
+- `server/src/agents/calendar-agent.ts` — added the full add pipeline: `extractEvent()` (LLM structured extraction, temp 0.3), `proposeEvent()` (inserts the Mongo `proposed` row, builds the reply text), `getCalendarView()` (merges live Google events + Mongo `proposed` rows for the dashboard), `confirmProposedEvent(eventId)` and `discardProposedEvent(eventId)` (plain exported functions, not graph nodes — called only from their routes). `calendarAgent()` now branches on `calendar_add` vs `calendar_read`.
+- `server/src/routes/calendar.ts` — `GET /` now calls `getCalendarView()`; added `POST /confirm` and `POST /discard`, both zod-validated `{ eventId }`.
+- `server/src/types/index.ts` — `NewEvent` (createEvent's input) and `EventExtraction` (nullable pre-validation LLM shape) added.
+- `server/src/agents/run-calendar-add-test.ts` — new, permanent `npm run calendar-add:test`. Proposes through the real compiled graph, confirms via the real function, then **independently re-reads the event straight from the Google API** (not through our own `listUpcomingEvents()`) to prove the write-scope widening actually works before cleaning up both the Google event and the Mongo row. Also verifies discard.
+- `server/package.json` — `calendar-add:test` script added.
+- Client: `lib/api.ts` (`confirmCalendarEvent`/`discardCalendarEvent`), `EventItem.tsx` (Pending badge + inline Confirm/Discard, in-flight disable, error message on failure), `Chip.tsx` (disabled-state classes, shared component), `CalendarPage.tsx` (`refetch` wired into each `EventItem`).
+- `context/progress-tracker.md` and `context/ui-registry.md` also updated (feature ticked, full decisions trail, `EventItem`/`Chip` registry entries updated via `/imprint`) — not part of the PR file list below since that's server/client only, but worth knowing they're current.
 
 ## Decisions made
 
-- **No caching into the `events` Mongo collection — `GET /api/calendar` and the chat path both read live from Google every time.** A calendar read is one cheap API call with no LLM step to amortize (unlike trends' 3-API + LLM-scoring pipeline); `events` stays reserved for proposed/confirmed writes only (feature 14).
-- **`EventItem`'s dot color always defaults to `pink` for real events** — no field in Google Calendar's data maps to the 4-token palette unless she manually color-codes events there, which can't be assumed. Closes the open question feature 12 left behind.
-- **Fixed 14-day window, no natural-language date-range parsing.** "What's on this week?" and "what's on today?" return the same list — kept deterministic and LLM-free, out of scope for this feature.
-- **Credential loader tolerates both a file path and inline JSON** — explicit developer requirement (mid-session correction) so switching to an env-string on a filesystem-less production host later needs zero code changes, just an env var swap.
-- **`calendar_add` intent is untouched** — still returns its original stub; feature 14 owns the propose-then-confirm write flow.
+- **Confirm/discard bypass the LangGraph entirely.** `POST /api/calendar/confirm` and `/discard` call plain functions directly, same pattern `GET /api/calendar` already used since feature 13. `createEvent` is reachable from exactly one call site (`confirmProposedEvent`) — the "never write directly from the agent" safety rule holds structurally, not by convention. `AgentState.approval` stays unused.
+- **No date/timezone library added.** The extraction prompt gets "now" in `profile.timezone` and returns naive local wall-clock ISO strings (no offset); `createEvent` sends those to Google alongside `timeZone: profile.timezone` and lets Google resolve the real instant. Verified live: a 10:00 Rome proposal landed in Google as `08:00Z` with `timeZone: "Europe/Rome"` attached.
+- **Mongo `events.start`/`end` store wall-clock numbers reinterpreted as UTC**, not real UTC instants (`parseLocalDateTime`/`toLocalDateTimeString` in `calendar-agent.ts` are the exact inverse pair). Keeps `start`/`end` as real `Date` values matching the existing `EventDoc` schema, with zero timezone-math dependencies. Single-user app; a mid-flight `profile.timezone` change between propose and confirm would drift the label — accepted, low-probability risk.
+- **Discard is in scope**, beyond what `build-plan.md` originally specified (propose + confirm only) — explicit developer call, made during `/architect`. Deletes the Mongo row outright rather than adding a third `status` value.
+- **`createEvent` throws on failure instead of degrading to empty**, a deliberate divergence from this file's own `listUpcomingEvents` (which still degrades to `[]`). A write that flips a proposal to "confirmed" must not silently swallow a real failure.
+- **`confirmProposedEvent` claims the row atomically** (`findOneAndUpdate` filtered on `status: "proposed"`, not a `findOne`-then-`updateOne`) — post-review fix, closes a double-click race. If the subsequent Google write then fails, the claim is reverted back to `"proposed"` rather than stranding the row as `"confirmed"` with no `gcal_id`.
 
 ## Problems solved
 
-- **`service-account-key.json` (repo root) was not actually gitignored.** `server/.gitignore` listed the filename, but `.gitignore` rules in a subdirectory only reach that subdirectory's tree — the key file sits one level above `server/`. Confirmed via `git check-ignore -v` (no match) and `git status` (showed as untracked/exposed). Fixed by adding a root-level `.gitignore`. Re-confirmed ignored afterward.
-- **`GOOGLE_CALENDAR_CREDENTIALS` path was relative to the wrong cwd.** It was set to `./service-account-key.json`, but `npm run dev`'s cwd is `server/`, and the key file is one level above that — fixed to `../service-account-key.json`.
-- **Uncommented `as string` type assertions in `normalizeEvent`** (found during `/review`) were both a code-standards violation (zero precedent anywhere else in `server/src`, confirmed via a full grep) and a latent bug: the zod schema at the time allowed an event's `start`/`end` to have neither `date` nor `dateTime`, so the assertion could let `undefined` silently flow through typed as `string`, producing "Invalid Date" downstream instead of being skipped like every other malformed event. Fixed with a zod `.refine()` on `eventTimeSchema` (rejects the missing-both case at `safeParse`) plus a control-flow-narrowing `extractTime()` helper — its truthy checks exactly mirror the refine's `Boolean()` checks, so the one remaining fallback branch is provably unreachable. Verified live against a real all-day event (previously the untested path).
-- **Vite binds to IPv6 loopback (`[::1]:5173`) by default, not `127.0.0.1`.** Playwright screenshot script had to target `http://localhost:5173`, not `127.0.0.1` — the inverse of the `127.0.0.1`-over-`localhost` fix from feature 12's session; both quirks are shell/tool-specific, not real server issues.
-- **Background dev-server processes survived `TaskStop` calls** — the npm parent process was stopped but the underlying `tsx watch`/`vite` child kept the port bound. Had to `netstat -ano` for the actual listening PID and `taskkill //PID <pid> //F` directly.
+- **`exactOptionalPropertyTypes: true` rejected `location: event.location` (a `string | undefined`) being passed where the target type has `location?: string`.** Both in `createEvent`'s own signature usage and in the Google API SDK's own `Schema$Event` type. Fixed with conditional spread (`...(location ? { location } : {})`) instead of assigning `undefined` explicitly, in both `google-calendar.ts` and `calendar-agent.ts`.
+- **A cascaded TS error ("Property 'data' does not exist...") on `calendar.events.insert(...)` turned out to be the same `location` typing issue** — once the object literal didn't match any call overload, TS fell back to a bad overload resolution and the return type inference broke too. Fixing the `location` typing resolved both errors.
+- **Playwright's default viewport made the chat send-button selector ambiguous** — a generic `button[type='submit'], button:has(svg)` selector matched the mobile hamburger button at a narrow viewport instead of the actual send button. Fixed by setting an explicit desktop viewport (1280×900) and targeting `button[aria-label='Send message']` directly.
+- **Browser-driven (Playwright) confirm clicks create REAL Google Calendar writes that the self-cleaning `calendar-add:test` script has no knowledge of.** After the live UI verification pass, a real "Shoot" event was left in Sofia's actual calendar and a matching row in Mongo — both had to be found and deleted manually (via a scratch script and direct Google API query) before the session could be considered clean. Worth remembering for any future feature that verifies a write path through the browser: UI-driven writes need their own explicit cleanup, separate from any test script's built-in cleanup.
 
 ## Current state
 
-- **Feature 13 complete: built, reviewed twice (pre-fix: 1 Important + 2 Minor found; post-fix: re-reviewed and re-verified live, 0 remaining issues), ready to ship.** `tsc -b --noEmit` clean on both `server/` and `client/`. Playwright confirmed `/calendar` at all 3 responsive breakpoints against real data — zero console/page errors both before and after the fix pass.
-- Live-verified end to end multiple times: real timed + all-day events inserted via elevated test-only calls, read back correctly through the actual readonly service, then deleted (calendar left empty each time — no leftover test data). `GET /api/calendar` and the `calendar_read` chat path both confirmed against real data; `calendar_add` confirmed still returns its unchanged stub.
-- **Repo state:** branch `calendarRead`. Developer committed the pre-fix server-side work themselves as `7f5fb09` ("feat: build read feature for calendar agent"). Client-side files, `context/progress-tracker.md`, the new root `.gitignore`, and the post-review fixes to `google-calendar.ts`/`run-calendar-test.ts` are still **uncommitted** — working tree is not clean. Developer commits their own work in this project; no commit made by me this session.
+- **Feature 14 complete, reviewed, both post-review fixes verified live, ticked in `progress-tracker.md`.** `tsc -b --noEmit` clean on both `server/` and `client/`.
+- Live-verified multiple times against the real stack: full propose→confirm→independent-Google-read→cleanup cycle (`npm run calendar-add:test`); a standalone concurrency script firing two simultaneous confirms at one proposal (exactly one won, no duplicate Google event); a full Playwright pass through the real dashboard (propose via chat, two Pending rows, Confirm one/Discard the other, 0 pending remain); a route-intercepted forced-failure Playwright pass proving the error-message/button-disable fix.
+- Sofia's real Google Calendar and the `events` Mongo collection were both independently confirmed empty at session end — every test event created during the session (including the one left over from a browser-driven confirm click) was found and deleted.
+- **Repo state:** branch `calendarAdd`, off `main`. Nothing committed by me this session — developer commits their own work in this project, per established pattern from prior sessions.
 - Dev servers stopped, ports confirmed free at session end.
 
 ## Next session starts with
 
-**Feature 14 — Calendar Add (Propose Then Confirm)**: parse a natural-language event request into a `proposed` row in the `events` collection (not written to Google yet), reply asking for confirmation; `POST /api/calendar/confirm` writes to Google Calendar via a new `createEvent` in `google-calendar.ts` (this is where the service's OAuth scope needs to widen from `calendar.readonly` to full `calendar` access) and flips status to `confirmed`. Run `/architect` first per the project's loop.
+**Feature 15 — DMs Panel (Full UI, Mock)**, per `build-plan.md` Phase 6: filtered DM list matching the design (avatar, name + classification badge, preview, timestamp, unread dot), mock brand-inquiry and active-collab rows, no backend work yet. Run `/architect` first per the project's loop.
 
 ## Open questions
 
-- Whether the calendar currently used for dev/testing (a service account's own calendar, set up as a "tester") will be swapped for Sofia's real shared calendar before production, or is the intended long-term setup — not addressed this session, worth confirming before feature 14 starts writing real events.
-- Feature 14 needs `google-calendar.ts`'s scope widened from readonly to full `calendar` access — not built yet, just noted.
-- `@langchain/google` still pre-1.0 (0.2.x) — carried over from earlier sessions, still no action needed yet.
+- Whether the dev/test calendar (a service-account-owned calendar set up as a "tester") gets swapped for Sofia's real shared calendar before production — carried over from feature 13, now more relevant since writes are live, not just reads. Not addressed this session.
+- `@langchain/google` still pre-1.0 (0.2.x) — carried over, no action needed yet.
 
 ---
 
-## PR Summary — Feature 13: Calendar Read
+## PR Summary — Feature 14: Calendar Add (Propose Then Confirm)
 
-**What this PR does:** Replaces feature 12's mock Calendar panel data with a real, read-only Google Calendar integration. `calendar_read` (chat/WhatsApp) and `GET /api/calendar` (dashboard) both now return Sofia's real upcoming events via a service-account-authenticated Google Calendar API read, always fetched live (no caching). `calendar_add` is untouched — still a stub, that's feature 14.
+**What this PR does:** Makes `calendar_add` real. She asks in chat ("add a shoot Monday 10am in Milan"); the agent extracts a structured event via one LLM call and writes a `proposed` row to Mongo — Google Calendar is never touched at this point. The Calendar dashboard panel now merges live Google events with pending proposals; each proposal shows a "Pending" badge with **Confirm** and **Discard** actions. Confirm calls a new `createEvent` (write scope now full calendar access, was read-only) and flips the row to `confirmed`; Discard deletes it. Neither action goes through the LangGraph — both are plain functions called directly by their routes, keeping the "never write to Google from the agent" safety rule structural rather than conventional.
 
 **Major changes:**
-- New `services/google-calendar.ts` — service-account auth (file-path or inline-JSON credential, tolerant of both), `listUpcomingEvents(days = 14)`, zod-validated with a refine that rejects events missing both `date` and `dateTime` on start/end.
-- `calendar-agent.ts` rewritten — real `calendar_read` (fetch, map, deterministic WhatsApp-friendly summary), `calendar_add` stub left unchanged.
-- New `GET /api/calendar` route, mounted in `index.ts`.
-- New permanent live-verification script (`npm run calendar:test`) — inserts/reads/deletes both a timed and an all-day test event against the real API.
-- Client `CalendarEvent` type consolidated into `lib/types.ts` (mock file deleted); `CalendarPage` wired to real data with loading/error states; dot color defaults to brand pink for all real events (no per-event category signal exists in Google's data).
-- Fixed during review: replaced uncommented `as` type assertions with a schema-level guarantee + type-narrowing helper (closes a latent "Invalid Date" risk for malformed events); named a magic number constant; removed a redundant client-side sort.
+- `services/google-calendar.ts`: OAuth scope widened to full calendar write access; new `createEvent()` that throws (rather than degrades) on failure, since a swallowed failure here would falsely mark a proposal confirmed.
+- `agents/calendar-agent.ts`: full propose → confirm → discard pipeline. Event times are extracted as naive local wall-clock strings and paired with `profile.timezone` at the point of calling Google — no timezone-math library needed anywhere in the codebase.
+- `confirmProposedEvent` claims its Mongo row atomically (`findOneAndUpdate` filtered on `status: "proposed"`) so two near-simultaneous confirm clicks can't both write to Google; a failed Google write reverts the claim.
+- New `POST /api/calendar/confirm` and `POST /api/calendar/discard` routes.
+- New permanent live-verification script (`npm run calendar-add:test`) that independently re-reads a confirmed event straight from the Google API (not through the app's own read path) before cleaning up — proves the write-scope change actually works, not just that the code didn't throw.
+- Client: `EventItem` renders the Pending badge + Confirm/Discard actions, disables both while a request is in flight, and surfaces a human-readable error message on failure instead of failing silently. `Chip` gained shared `disabled:*` styling.
 
 **Files changed:**
 
 *server/*
-- `server/src/services/google-calendar.ts` (new)
-- `server/src/services/run-calendar-test.ts` (new)
-- `server/src/routes/calendar.ts` (new)
-- `server/src/agents/calendar-agent.ts` (modified — rewritten)
-- `server/src/index.ts` (modified — router mounted)
-- `server/src/lib/env.ts` (modified — `GOOGLE_CALENDAR_ID` added)
-- `server/src/types/index.ts` (modified — `GoogleCalendarEvent`, `EventColor`, `CalendarEventView` added)
-- `server/.env.example` (modified)
-- `server/.gitignore` (modified)
-- `server/package.json` (modified — `googleapis` added)
-- `server/package-lock.json` (modified)
+- `server/src/services/google-calendar.ts` (modified — scope widened, `createEvent` added)
+- `server/src/agents/calendar-agent.ts` (modified — propose/confirm/discard pipeline added)
+- `server/src/routes/calendar.ts` (modified — `POST /confirm`, `POST /discard` added, `GET /` repointed)
+- `server/src/types/index.ts` (modified — `NewEvent`, `EventExtraction` added)
+- `server/src/agents/run-calendar-add-test.ts` (new)
+- `server/package.json` (modified — `calendar-add:test` script)
 
 *client/*
-- `client/src/lib/types.ts` (modified — `CalendarEvent`/`EventColor` added)
-- `client/src/lib/api.ts` (modified — `getCalendarEvents()` added)
-- `client/src/lib/mock-events.ts` (deleted)
-- `client/src/components/calendar/CalendarGrid.tsx` (modified — import path only)
-- `client/src/components/calendar/EventItem.tsx` (modified — import path only)
-- `client/src/pages/CalendarPage.tsx` (modified — rewritten for real data)
+- `client/src/lib/api.ts` (modified — `confirmCalendarEvent`, `discardCalendarEvent` added)
+- `client/src/components/calendar/EventItem.tsx` (modified — Pending badge, inline Confirm/Discard, in-flight disable, error display)
+- `client/src/components/common/Chip.tsx` (modified — disabled-state classes)
+- `client/src/pages/CalendarPage.tsx` (modified — `refetch` wired into `EventItem`)

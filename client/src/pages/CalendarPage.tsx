@@ -31,6 +31,13 @@ export function CalendarPage() {
     };
   }, []);
 
+  async function refetch(): Promise<void> {
+    const result = await getCalendarEvents();
+    if (result.success) {
+      setEvents(result.data);
+    }
+  }
+
   if (state === "loading") {
     return (
       <div className="flex flex-1 items-center justify-center px-5.5 py-4.5 text-[12px] text-text-secondary">
@@ -59,7 +66,7 @@ export function CalendarPage() {
         <>
           <div className="flex flex-col gap-2">
             {events.map((event) => (
-              <EventItem key={event.id} event={event} />
+              <EventItem key={event.id} event={event} onChange={refetch} />
             ))}
           </div>
           <Chip className="mt-3" onClick={() => goToChat("Add a new event to my calendar")}>
