@@ -3,9 +3,12 @@ import { google } from "googleapis";
 import { z } from "zod";
 import { getGoogleCalendarEnv } from "@/lib/env";
 import { logger } from "@/lib/logger";
-import type { GoogleCalendarEvent } from "@/types";
+import type { GoogleCalendarEvent, NewEvent } from "@/types";
 
-const SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"];
+// Widened from calendar.readonly (feature 13) to full write access — feature
+// 14's createEvent needs to insert events. Covers reads too, so
+// listUpcomingEvents needs no scope change of its own.
+const SCOPES = ["https://www.googleapis.com/auth/calendar"];
 const DEFAULT_DAYS = 14;
 const MAX_EVENTS = 50;
 
@@ -116,4 +119,32 @@ export async function listUpcomingEvents(days: number = DEFAULT_DAYS): Promise<G
     logger.error("services/google-calendar", "Failed to list events", error);
     return [];
   }
+}
+
+// Deliberately does NOT catch-and-degrade like listUpcomingEvents() above —
+// the caller (calendar-agent.ts's confirmProposedEvent) flips a proposal to
+// "confirmed" based on this succeeding, so a swallowed failure here would
+// mark an event confirmed when nothing was actually created in Google. The
+// error propagates and is handled by the caller's own try/catch instead.
+export async function createEvent(event: NewEvent): Promise<string> {
+  const { GOOGLE_CALENDAR_CREDENTIALS, GOOGLE_CALENDAR_ID } = getGoogleCalendarEnv();
+  const credentials = loadServiceAccountCredentials(GOOGLE_CALENDAR_CREDENTIALS);
+  const auth = new google.auth.GoogleAuth({ credentials, scopes: SCOPES });
+  const calendar = google.calendar({ version: "v3", auth });
+
+  const res = await calendar.events.insert({
+    calendarId: GOOGLE_CALENDAR_ID,
+    requestBody: {
+      summary: event.title,
+      ...(event.location ? { location: event.location } : {}),
+      start: { dateTime: event.start, timeZone: event.timeZone },
+      end: { dateTime: event.end, timeZone: event.timeZone },
+    },
+  });
+
+  const eventId = res.data.id;
+  if (!eventId) {
+    throw new Error("Google Calendar did not return an id for the created event");
+  }
+  return eventId;
 }

@@ -139,6 +139,28 @@ export type CalendarEventView = {
   status: "confirmed" | "proposed";
 };
 
+// Input to services/google-calendar.ts's createEvent. start/end are naive
+// local wall-clock ISO strings with no offset (e.g. "2026-08-24T10:00:00") —
+// timeZone travels alongside so Google resolves the real UTC instant itself,
+// meaning no timezone-offset math happens anywhere in this codebase.
+export type NewEvent = {
+  title: string;
+  start: string;
+  end: string;
+  location?: string;
+  timeZone: string;
+};
+
+// Raw output of calendar-agent.ts's event-extraction LLM call, before
+// validation. Any field can fail to resolve, in which case the agent asks
+// her to clarify instead of writing a proposal — see proposeEvent().
+export type EventExtraction = {
+  title: string | null;
+  start: string | null;
+  end: string | null;
+  location: string | null;
+};
+
 export type DocumentChunk = {
   _id?: ObjectId;
   doc_type: "rate_card" | "contract";

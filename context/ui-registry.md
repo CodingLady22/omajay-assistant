@@ -207,7 +207,7 @@ The action chip button reuses `QuickChips`' exact canonical chip classes unchang
 ### Chip
 
 File: client/src/components/common/Chip.tsx
-Last updated: 2026-08-13
+Last updated: 2026-08-19
 
 | Property         | Class                                                                      |
 | ---------------- | ----------------------------------------------------------------------------- |
@@ -217,12 +217,14 @@ Last updated: 2026-08-13
 | Text — primary    | n/a                                                                          |
 | Text — secondary  | `text-text-secondary` default → `text-pink` on hover                        |
 | Spacing           | `px-[11px] py-1`; extra margin (e.g. `mt-2.5`) passed in via `className`     |
-| Hover state       | `hover:border-pink-mid hover:bg-pink-light hover:text-pink`                 |
+| Hover state       | `hover:border-pink-mid hover:bg-pink-light hover:text-pink` (suppressed when disabled — see below) |
 | Shadow            | none                                                                         |
 | Accent usage      | pink on hover                                                               |
 
 **Pattern notes:**
 This is the extracted canonical chip button — `QuickChips.tsx`, `TrendsPage.tsx`'s empty state, and `ScriptCard.tsx`/`ScriptsPage.tsx`'s action chips all previously copy-pasted this exact className 4×; feature 11 consolidated them into this one component (flagged for extraction back in feature 10's `/code-review`, deliberately deferred to this feature per `build-plan.md`). It's a thin wrapper around a native `<button type="button">` — accepts all standard button props plus `children`, and merges an optional `className` onto the base classes (so call sites can add spacing like `mt-2.5` without forking the component). Any future quick-action/secondary button should use `<Chip>` directly instead of re-typing the className.
+
+**2026-08-19 — disabled-state classes added (feature 14).** `disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border disabled:hover:bg-transparent disabled:hover:text-text-secondary` added to the base className — a plain `disabled` HTML attribute alone left the hover treatment still visually "live" on a disabled Chip. Added to the shared component (not a one-off override) since every existing call site passes no `disabled` prop today and is unaffected; any future Chip usage that needs an in-flight/disabled state (like `EventItem`'s Discard button) gets this for free rather than re-deriving it.
 
 `useChatPrompt()` (`client/src/lib/useChatPrompt.ts`) was extracted alongside it — a one-line hook wrapping `navigate("/", { state: { prompt } })`, replacing the same 4 duplicated call sites (`TrendCard.tsx`, `TrendsPage.tsx`, `ScriptCard.tsx`, `ScriptsPage.tsx`). Not a visual pattern, so it has no table entry here, but any future "go to chat with a prefilled prompt" action should use this hook rather than calling `navigate` directly.
 
@@ -253,7 +255,7 @@ Today's highlight reuses the exact `bg-pink-light text-pink font-medium`-family 
 ### EventItem
 
 File: client/src/components/calendar/EventItem.tsx
-Last updated: 2026-08-15
+Last updated: 2026-08-19
 
 | Property         | Class                                                              |
 | ---------------- | ------------------------------------------------------------------- |
@@ -261,13 +263,15 @@ Last updated: 2026-08-15
 | Border            | `border-[0.5px] border-border`                                      |
 | Border radius     | `rounded-md`                                                         |
 | Text — primary    | `text-text-primary` (title, 13px medium)                            |
-| Text — secondary  | `text-text-secondary` (meta line, 11px — weekday/date/time/location) |
-| Spacing           | `gap-2.5` dot/text gap · `px-3 py-2.5` card padding · `mt-0.5` title-to-meta gap |
-| Hover state       | none                                                                 |
+| Text — secondary  | `text-text-secondary` (meta line, 11px — weekday/date/time/location; also the failed-action error line, see below) |
+| Spacing           | `gap-2.5` dot/text gap · `px-3 py-2.5` card padding · `mt-0.5` title-to-meta gap · `mt-2` actions-row gap · `gap-1.5` between Confirm/Discard |
+| Hover state       | none on the row itself; Confirm/Discard use their own button patterns (see below) |
 | Shadow            | none                                                                 |
-| Accent usage      | dot: `bg-pink` / `bg-coral` / `bg-success` / `bg-info` per event's `color` field, `h-2 w-2 rounded-full` |
+| Accent usage      | dot: `bg-pink` / `bg-coral` / `bg-success` / `bg-info` per event's `color` field, `h-2 w-2 rounded-full` · Pending badge: `bg-info-bg text-info` |
 
 **Pattern notes:**
 The four dot colors are drawn from the existing closed palette (`pink`, `coral`, `success`, `info`) rather than adding two new near-duplicate green/blue tokens to match the design mock's raw `#639922`/`#378ADD` — confirmed during `/architect` as a deliberate divergence from the mock's exact hex, keeping `ui-tokens.md`'s token set closed. `color` is a client-only mock field (the server `events` schema has no category/color column yet); feature 13 will need to decide how a real Google Calendar read maps to one of these four before this can go further than mock data. The meta line's "All day" vs. time-range formatting is derived (start at 00:00 + end at 23:59 → "All day"), not a stored flag — matches the mock's `.event-time` text exactly for both cases.
 
 `rounded-md` (10px) here vs. `rounded-lg` (14px) on `TrendCard`/`ScriptCard` is **not** drift — it matches `glam-ai.html`'s own CSS exactly (`.event-item`/`.cal-day`/`.cal-nav button` all specify `var(--radius-md)`, while `.trend-card`/`.script-card` specify `var(--radius-lg)`). The design intentionally uses the smaller radius for list-row-style items and the larger one for grid-tile cards — any future list-row component (e.g. a DM row) should default to `rounded-md` unless the mock shows otherwise.
+
+**2026-08-19 — Pending badge + inline Confirm/Discard actions added (feature 14).** When `event.status === "proposed"`, the title row gains a `bg-info-bg px-1.75 py-0.5 text-[10px] font-normal text-info rounded-full` badge reading "Pending" — this reuses `ScriptCard`'s neutral kind-badge shape/color verbatim, **not** the DM pink/green classification pair, since "pending" isn't a DM-classification meaning and `ui-tokens.md` reserves that pair. Below the meta line, a Confirm button (`rounded-md bg-pink px-3 py-1 text-[11px] text-white hover:opacity-85` — the canonical primary-button treatment, same family as `ChatPanel`'s send button) sits next to a `<Chip>` "Discard". Both disable (`disabled:cursor-not-allowed disabled:opacity-40`) while their own request is in flight — clicking either locks both buttons, since only one action should be possible on a given proposal at a time. On failure, a plain `text-[11px] text-text-secondary` line renders the server's error message beneath the buttons (no dedicated error/danger token exists yet — this matches the plain-secondary-text convention every other panel's "error" load-state already uses, ahead of feature 23's unified error-styling pass, rather than inventing a one-off color here). Any future inline-approval-on-a-list-row pattern (e.g. a future DM "Approve & send") should reuse this exact shape: badge + primary/secondary button pair + in-flight disable + plain-text failure line.
