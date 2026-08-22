@@ -1,9 +1,9 @@
 import { getDb } from "@/db/client";
 import { logger } from "@/lib/logger";
 
-// Provisional — must match the embedding model chosen in feature 18 (RAG ingest).
-// Update this one constant once the model is finalized (e.g. Voyage AI); a
-// mismatch is not caught at insert time, only when Atlas rejects the query.
+// Must match the embedding model's output dimension (feature 18: Voyage AI's
+// voyage-3, 1024-dim, via rag/embeddings.ts). A mismatch is not caught at
+// insert time, only when Atlas rejects the query.
 export const EMBEDDING_DIMENSIONS = 1024;
 
 const VECTOR_INDEX_NAME = "documents_vector_index";

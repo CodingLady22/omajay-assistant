@@ -10,6 +10,8 @@ Because WhatsApp is the primary interface, "testable" sometimes means a WhatsApp
 
 **WhatsApp is currently deferred (2026-08-03)** — feature 05 is blocked on a Meta WhatsApp Cloud API token that isn't available yet. It has been resequenced to run later, whenever the token arrives; it is not cancelled or dropped. Until it lands, **every "verify on WhatsApp" step below should be read as "verify via the dashboard chat (`POST /api/chat`)"** — both surfaces run the exact same graph, so this changes nothing about what's being tested, only which door is used to test it. See `progress-tracker.md`'s Decisions section for the full rationale.
 
+**Phase 6 (Instagram DMs, features 15-17) is currently deferred (2026-08-19)** — blocked on Instagram credentials (`INSTAGRAM_TOKEN` / `INSTAGRAM_ACCOUNT_ID`), not yet available. Resequenced to run later, whenever the token lands; not cancelled. Because Phase 6 is self-contained and Phase 7 (Contracts) doesn't depend on it, the build proceeds straight to feature 18 next. See `progress-tracker.md`'s Decisions section for the full rationale.
+
 **Each feature runs through the engineering loop** (see `AGENTS.md`):
 
 ```
@@ -208,11 +210,13 @@ Set up the project shell.
 
 ---
 
-## Phase 6 — Instagram DMs
+## Phase 6 — Instagram DMs — **DEFERRED**
+
+**Phase status: blocked on Instagram credentials (`INSTAGRAM_TOKEN` / `INSTAGRAM_ACCOUNT_ID`), not yet available as of 2026-08-19.** All three features below (15-17) are resequenced to run later, whenever the token lands — not cancelled. This phase is self-contained (DMs panel + fetch/classify + draft/approve, all Instagram-specific) and Phase 7 (Contracts) has no dependency on it, so the plan jumps straight to feature 18 next. Same deferral pattern as feature 05 (WhatsApp). `services/instagram.ts` stays on its feature-07 `[]` stub untouched — the trends scan already handles it returning empty, and nothing in Phase 6 changes that until the token arrives.
 
 ### 15 DMs Panel — Full UI (Mock)
 
-**UI:**
+**UI (unchanged from original plan — build this when unblocked):**
 
 - Filtered DM list matching the design: avatar, name + classification badge, preview, timestamp, unread dot.
 - Mock brand-inquiry and active-collab rows.
@@ -223,7 +227,7 @@ Set up the project shell.
 
 ### 16 DMs Fetch + Classify + Summarise
 
-**Logic:**
+**Logic (unchanged from original plan — build this when unblocked):**
 
 - `server/services/instagram.ts` — `fetchRecentDms`.
 - `server/agents/dms-agent.ts` — classify each DM (`brand_inquiry` / `active_collab` / `ignore`), summarise, draft a reply. Cache in `dms` (dedupe on `ig_thread_id`).
@@ -236,7 +240,7 @@ Set up the project shell.
 
 ### 17 DM Reply — Draft Then Approve
 
-**Logic:**
+**Logic (unchanged from original plan — build this when unblocked):**
 
 - Agent only ever produces `draft_reply` — it never sends.
 - `POST /api/dms/send` — sends a reply to Instagram **only** with an explicit approval payload (thread id + approved text).
@@ -252,12 +256,13 @@ Set up the project shell.
 
 **Logic:**
 
-- `server/rag/ingest.ts` — chunk + embed her rate cards and old contracts into `documents`.
-- `server/rag/embeddings.ts` — embedding client.
+- `server/fixtures/documents/*.md` — 2-3 dummy rate card / past contract fixture files (plain text/markdown, not PDF — avoids a PDF-text-extraction dependency during the mock phase; her real PDFs get parsed once production documents are wired in).
+- `server/rag/ingest.ts` — chunk + embed a document into `documents`, exposed as **reusable exported functions** (ingest one document; remove one document's chunks) — not one-shot script-only code. Feature 21 (Document Management UI) calls these same functions directly to embed a newly uploaded document and remove a deleted one's chunks, so this can't be written as script-local logic.
+- `server/rag/embeddings.ts` — embedding client, **Voyage AI** (`voyage-3`, 1024-dim — matches the `EMBEDDING_DIMENSIONS` placeholder already in `indexes.ts` from feature 02, no dimension rework needed).
 - Confirm the Atlas Vector Search index from feature 02 matches embedding dimensions.
-- An ingest script/endpoint to load her documents.
+- A one-off ingest script (`npm run rag:ingest`, mirroring `trends:test`/`calendar:test`) that calls the exported ingest function against the fixture documents — this feature is verified via script + mock data only; the real upload/delete UI is feature 21.
 
-**Verify:** documents are chunked, embedded, and stored; a test vector query returns relevant chunks.
+**Verify:** run the ingest script against the fixture documents; documents are chunked, embedded, and stored; a test vector query returns relevant chunks.
 
 ---
 
@@ -281,14 +286,30 @@ Set up the project shell.
 - `server/services/pdf.ts` — render an editable PDF with pdf-lib; store in GridFS; save to `contracts`.
 - `POST /api/contracts/draft`, `GET /api/contracts`, `GET /api/contracts/:id/pdf`.
 - Deliver the PDF to WhatsApp as a document; show in the dashboard.
+- **Distinguish "no results" from "index missing."** Recorded during feature 18's `/review` (2026-08-22): that feature discovered the Atlas Vector Search index can silently disappear (shared-tier cluster pause/resume drops Search indexes without touching the underlying data — see `progress-tracker.md`'s Decisions). If `rag/retrieve.ts`'s `$vectorSearch` call returns zero results across the board, `contracts-agent.ts` shouldn't just say "nothing on file" as if retrieval genuinely found no match — it should fail with an explicit hint (e.g. "no results — vector index may be missing, run `db:setup-search-index`"), since the two situations are otherwise indistinguishable and a dropped index would silently look identical to an honest empty-retrieval case.
 
 **Verify:** "draft a contract for the Velour summer deal" retrieves her real rates, drafts grounded terms, and returns an editable PDF on WhatsApp and in the dashboard.
 
 ---
 
+### 21 Document Management UI
+
+**UI + Logic:**
+
+- New document-management UI — nested in the Contracts panel, since these are the source documents that ground contract drafts — letting her upload, list, and delete her own rate cards and past contracts. Replaces feature 18's script-driven mock ingest as the real, production way documents get into `documents`.
+- Upload calls `rag/ingest.ts`'s exported ingest function (built in feature 18) directly to chunk, embed, and store the new document.
+- Delete calls `rag/ingest.ts`'s exported removal function (also built in feature 18) to remove that document's chunks from `documents`.
+- List shows her uploaded documents (type, source/name, upload date).
+
+**Verify:** upload a real document through the UI and confirm a contract draft can retrieve from it; delete it and confirm its chunks are gone from `documents` and no longer retrievable.
+
+**Placed after feature 20, not next to feature 18 (2026-08-22, developer decision).** RAG is validated end-to-end with script-uploaded mock documents first (features 18-20), so the ingest pipeline, retrieval, and the contracts agent are all proven working before the upload UI exists — she needs this UI before real-world use, not before the agent itself works. Keeping it as its own feature (rather than folding into 18) also respects "one thing at a time": 18 is backend ingest + vector index only, this is its own frontend + routes concern with its own panel, components, and verify step.
+
+---
+
 ## Phase 8 — Morning Briefing (Autonomous)
 
-### 21 Briefing Agent + Scheduled Send
+### 22 Briefing Agent + Scheduled Send
 
 **Logic:**
 
@@ -298,7 +319,7 @@ Set up the project shell.
 - Register in `scheduler.ts`.
 - Log each briefing (and her reply, captured by the normal webhook) to `briefings`.
 
-**Delivery is pluggable (recorded 2026-08-03, given WhatsApp/feature 05 is deferred).** Build the briefing agent itself in full — gathering + composing the text — but keep delivery behind a single seam (e.g. a `deliverBriefing(text)` function `morning-briefing.ts` calls) rather than calling `sendWhatsApp` directly. Until feature 05 lands, that seam sends the briefing to the dashboard/console (e.g. logged + surfaced in the UI or written to `briefings` for the dashboard to display) instead of WhatsApp. Once WhatsApp is built, swap the seam's implementation to `sendWhatsApp` — no change to the agent or the gathering logic. This is a note for when feature 21 is actually built, not something to build now.
+**Delivery is pluggable (recorded 2026-08-03, given WhatsApp/feature 05 is deferred).** Build the briefing agent itself in full — gathering + composing the text — but keep delivery behind a single seam (e.g. a `deliverBriefing(text)` function `morning-briefing.ts` calls) rather than calling `sendWhatsApp` directly. Until feature 05 lands, that seam sends the briefing to the dashboard/console (e.g. logged + surfaced in the UI or written to `briefings` for the dashboard to display) instead of WhatsApp. Once WhatsApp is built, swap the seam's implementation to `sendWhatsApp` — no change to the agent or the gathering logic. This is a note for when feature 22 is actually built, not something to build now.
 
 **Verify:** trigger the job manually; receive a real, accurate briefing (via the dashboard/console delivery seam, or WhatsApp once 05 is done) that names today's events and actual unfinished items.
 
@@ -306,7 +327,7 @@ Set up the project shell.
 
 ## Phase 9 — Settings + Polish
 
-### 22 Settings Panel
+### 23 Settings Panel
 
 **UI + Logic:**
 
@@ -317,7 +338,7 @@ Set up the project shell.
 
 ---
 
-### 23 Empty States + Error Handling Pass
+### 24 Empty States + Error Handling Pass
 
 **Logic:**
 
@@ -339,7 +360,7 @@ Set up the project shell.
 | Phase 4 — Content           | 2        |
 | Phase 5 — Calendar          | 3        |
 | Phase 6 — DMs               | 3        |
-| Phase 7 — Contracts (RAG)   | 3        |
+| Phase 7 — Contracts (RAG)   | 4        |
 | Phase 8 — Morning Briefing  | 1        |
 | Phase 9 — Settings + Polish | 2        |
-| **Total**                   | **23**   |
+| **Total**                   | **24**   |
