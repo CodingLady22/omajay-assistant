@@ -24,9 +24,7 @@ export function ContractCard({ contract }: Props) {
       </div>
       <div className="text-xs leading-[1.65] text-text-secondary">{contract.dealSummary}</div>
       <div className="mt-2.5 flex gap-1.5">
-        <Chip disabled title="Coming once contracts can generate a real PDF (feature 20)">
-          Download PDF
-        </Chip>
+        <Chip disabled>Download PDF</Chip>
         <Chip onClick={() => goToChat(contract.editPrompt)}>Edit terms ↗</Chip>
       </div>
     </div>
