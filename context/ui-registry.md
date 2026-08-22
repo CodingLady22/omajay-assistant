@@ -275,3 +275,27 @@ The four dot colors are drawn from the existing closed palette (`pink`, `coral`,
 `rounded-md` (10px) here vs. `rounded-lg` (14px) on `TrendCard`/`ScriptCard` is **not** drift — it matches `glam-ai.html`'s own CSS exactly (`.event-item`/`.cal-day`/`.cal-nav button` all specify `var(--radius-md)`, while `.trend-card`/`.script-card` specify `var(--radius-lg)`). The design intentionally uses the smaller radius for list-row-style items and the larger one for grid-tile cards — any future list-row component (e.g. a DM row) should default to `rounded-md` unless the mock shows otherwise.
 
 **2026-08-19 — Pending badge + inline Confirm/Discard actions added (feature 14).** When `event.status === "proposed"`, the title row gains a `bg-info-bg px-1.75 py-0.5 text-[10px] font-normal text-info rounded-full` badge reading "Pending" — this reuses `ScriptCard`'s neutral kind-badge shape/color verbatim, **not** the DM pink/green classification pair, since "pending" isn't a DM-classification meaning and `ui-tokens.md` reserves that pair. Below the meta line, a Confirm button (`rounded-md bg-pink px-3 py-1 text-[11px] text-white hover:opacity-85` — the canonical primary-button treatment, same family as `ChatPanel`'s send button) sits next to a `<Chip>` "Discard". Both disable (`disabled:cursor-not-allowed disabled:opacity-40`) while their own request is in flight — clicking either locks both buttons, since only one action should be possible on a given proposal at a time. On failure, a plain `text-[11px] text-text-secondary` line renders the server's error message beneath the buttons (no dedicated error/danger token exists yet — this matches the plain-secondary-text convention every other panel's "error" load-state already uses, ahead of feature 24's unified error-styling pass, rather than inventing a one-off color here). Any future inline-approval-on-a-list-row pattern (e.g. a future DM "Approve & send") should reuse this exact shape: badge + primary/secondary button pair + in-flight disable + plain-text failure line.
+
+---
+
+### ContractCard
+
+File: client/src/components/contracts/ContractCard.tsx
+Last updated: 2026-08-22
+
+| Property         | Class                                                              |
+| ---------------- | ------------------------------------------------------------------- |
+| Background       | `bg-surface`                                                        |
+| Border            | `border-[0.5px] border-border` (static — no hover state)            |
+| Border radius     | `rounded-lg` (card) · `rounded-full` (status badge, action chips)   |
+| Text — primary    | `text-text-primary` (brand name, 13px medium)                       |
+| Text — secondary  | `text-text-secondary` (12px deal-summary body, `leading-[1.65]`)    |
+| Spacing           | `px-4 py-3.5` card padding · `mb-2` header-to-body gap · `mt-2.5` body-to-actions gap · `gap-1.5` between the two action chips |
+| Hover state       | none on the card itself; chips use the standard `Chip` hover, except the disabled "Download PDF" chip which suppresses hover entirely |
+| Shadow            | none                                                                 |
+| Accent usage      | status badge: `bg-info-bg text-info` (`px-1.75 py-0.5 text-[10px] font-normal rounded-full`), same label for both `draft`/`sent` values — colour does not vary by status |
+
+**Pattern notes:**
+This is a direct structural copy of `ScriptCard`'s shape — static (non-button) card, header row with a neutral badge on the right, body text, then a chip row — reused because a contract card has the same "no single obvious whole-card action" property `ScriptCard` was built around. The status badge deliberately does **not** distinguish `draft` from `sent` by colour (both use `bg-info-bg text-info`, differing only by label text) — confirmed during `/architect`, extending `ScriptCard`'s existing reasoning that the DM pink/green pair is reserved for DM classification only and every other panel's badge needs stays on the neutral `info` token rather than inventing a second meaning for `success`/`pink`.
+
+The two action chips diverge from each other on purpose: **"Edit terms ↗"** is a normal `<Chip>` wired through `useChatPrompt()`, matching every other mock-era action chip in the app (`TrendCard`, `ScriptCard`) — it prefills chat with a bespoke per-contract prompt. **"Download PDF"** is the same `<Chip>` component but rendered `disabled` with no `onClick` — there is no real PDF to download until feature 20 builds `services/pdf.ts`, so this follows `CalendarGrid`'s prev/next-chevron precedent (render the control matching intent, disable it, defer the handler to the feature that makes it real) rather than omitting the button or faking a download. `Chip`'s existing `disabled:*` classes (added in feature 14) already cover this with no component changes needed.
