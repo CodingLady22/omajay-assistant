@@ -1,59 +1,44 @@
-# Memory — Feature 18: Document Ingest + Vector Index (+ Phase 6 deferral, new Feature 21)
+# Memory — Feature 19: Contracts Panel (Full UI, Mock)
 
 Last updated: 2026-08-22
 
 ## What was built
 
-**Three things this session, in order: (1) Phase 6 deferred, (2) a new Feature 21 added to the plan, (3) Feature 18 built via `/architect` → build → `/review` (0 blocking issues) → tick progress-tracker.**
+Feature 19 shipped via the full loop: `/architect` → build → `/review` (2 issues found, both fixed, re-reviewed clean) → ticked in `progress-tracker.md`. Pure client-side mock UI — no server changes.
 
-**1. Phase 6 (Instagram DMs, features 15-17) deferred.** No Instagram credentials available. Marked `**DEFERRED**` in `build-plan.md` and `progress-tracker.md`, same pattern as feature 05 (WhatsApp) — resequenced, not cancelled. `services/instagram.ts` untouched (already a `[]` stub from feature 07). Plan jumps from 14 straight to 18 since Phase 7 (Contracts) has no dependency on Phase 6.
-
-**2. New feature added: 21 Document Management UI**, placed after feature 20 in `build-plan.md`. Lets Sofia upload/list/delete her own rate cards + contracts via the dashboard, replacing feature 18's script-driven mock ingest for real use. This pushed every feature after the old 21 up by one: old 21 (Briefing) → 22, old 22 (Settings) → 23, old 23 (Empty States) → 24. All cross-references across `build-plan.md`, `progress-tracker.md`, and `ui-registry.md` updated to match.
-
-**3. Feature 18 shipped.** RAG ingest pipeline: mock fixture documents get chunked, embedded via Voyage AI, and stored in `documents` behind the Atlas Vector Search index. No client-side work this feature (backend/script-verified only).
-
-- `server/fixtures/documents/rate-card.md`, `contract-velour.md`, `contract-glosswear.md` — new, dummy mock documents (plain markdown), per `AGENTS.md`'s mock-data rule.
-- `server/src/rag/embeddings.ts` — new. `embedDocuments()`/`embedQuery()` via Voyage AI (`voyage-3`, 1024-dim), called by plain `fetch` (no new SDK dependency). Throws on failure (does not degrade) except for 429s, which retry with backoff.
-- `server/src/rag/ingest.ts` — new. `chunkText()` (paragraph-aware, ~375-word/~500-token chunks), `ingestDocument()` and `removeDocument()` — both exported and reusable, idempotent (`ingestDocument` removes existing chunks for that `source` before inserting).
-- `server/src/rag/run-ingest.ts` — new. `npm run rag:ingest` — ingests the 3 fixtures, then runs a retrieval check that asserts the **topically correct** chunk comes back top-1 (not just a non-empty result).
-- `server/package.json` — `rag:ingest` script added.
-- `server/src/db/indexes.ts` — comment updated only (`EMBEDDING_DIMENSIONS = 1024` confirmed correct for `voyage-3`, no value change).
-- `server/src/lib/logger.ts` — `serializeMeta()` added (out-of-plan fix, disclosed in `/review`, developer confirmed keeping it).
-- `context/build-plan.md`, `context/progress-tracker.md` — feature 18 ticked, full decisions trail recorded, feature 20's entry got a new follow-up note (see below).
+- `client/src/lib/mock-contracts.ts` — new. `Contract`/`ContractStatus` types (`id`, `brand`, `dealSummary`, `status: "draft" | "sent"`, `editPrompt`) + `MOCK_CONTRACTS` (3 entries: Velour Cosmetics/sent, Glosswear Beauty/sent, Lumière Beauty/draft).
+- `client/src/components/contracts/ContractCard.tsx` — new. Static (non-button) card matching `ScriptCard`'s shape: brand + neutral status badge header row, deal-summary body, two action chips ("Download PDF" disabled, "Edit terms ↗" wired to `useChatPrompt()`).
+- `client/src/pages/ContractsPage.tsx` — rewritten, replacing the `ComingSoonPanel` stub with `MOCK_CONTRACTS.map(...)`.
+- `context/ui-registry.md` — new `ContractCard` entry (`/imprint` run).
+- `context/progress-tracker.md` — feature 19 ticked, decisions trail recorded, current status moved to feature 20.
 
 ## Decisions made
 
-- **Embedding provider: Voyage AI, not Gemini.** MongoDB acquired Voyage AI in 2025 (now Atlas's recommended `$vectorSearch` pairing); `rag/embeddings.ts` was already architected as its own client separate from `lib/llm.ts`'s provider-swap seam; `voyage-3`'s 1024-dim output exactly matches the placeholder already in `indexes.ts` — no dimension rework. Key is in `server/.env` as `EMBEDDING_API_KEY` (existing generic var name from feature 02, no plumbing changes needed).
-- **Mock fixtures, not real documents**, per `AGENTS.md`'s mock-data-until-production rule — same treatment every other feature got. Plain markdown, not PDF, to avoid adding a PDF-text-extraction dependency this phase (`pdf-lib` only creates PDFs, doesn't parse them).
-- **Ingest triggered by script** (`npm run rag:ingest`), not an endpoint — no upload UI exists yet (that's feature 21).
-- **`rag/ingest.ts` exports reusable functions, not script-local logic** — explicit developer requirement, since feature 21's future upload/delete routes must call `ingestDocument()`/`removeDocument()` directly.
-- **`rag/retrieve.ts` intentionally NOT built this feature** — scoped to feature 20 per `architecture.md`. The verify step runs one inline `$vectorSearch` query in the script instead of a reusable module.
-- **Verify step must assert topical correctness, not just non-emptiness** — explicit developer requirement. `run-ingest.ts` asserts a rates query returns the rate-card chunk as the #1 result, not just that `$vectorSearch` returned *something*.
-- **New feature 21 sequencing: after 20, not right after 18.** RAG (ingest → retrieve → draft) gets fully validated with script-uploaded mock docs first; she needs the upload UI before real-world use, not before the agent works.
-- **Feature 20 follow-up recorded (not built):** when a `$vectorSearch` call returns zero results across the board, the contracts agent should fail with an explicit "vector index may be missing, run `db:setup-search-index`" hint rather than a plain "nothing on file" — because a dropped index and a genuine empty match are otherwise indistinguishable. Noted directly on feature 20's `build-plan.md` entry.
+- **Mock brands reuse names already alive elsewhere** (Velour Cosmetics + Glosswear Beauty from the feature-18 RAG fixtures, Lumière Beauty from the DMs design mock) instead of inventing new ones — keeps every panel's mock data telling one consistent story, and means feature 20's real drafting will retrieve against brands this panel already shows.
+- **Status badge is neutral `bg-info-bg text-info` for both `draft` and `sent`**, differentiated only by label text, not colour — extends `ScriptCard`'s existing rule that the DM pink/green pair is reserved for DM classification only.
+- **"Edit terms ↗" vs "Download PDF" deliberately behave differently.** Edit terms is a normal chat-prefill `Chip` (matches every other mock-era action). Download PDF is rendered `disabled` with no handler — no real PDF exists until feature 20 builds `services/pdf.ts` — following `CalendarGrid`'s prev/next-chevron precedent (bare `disabled`, no tooltip, no handler).
+- **`Contract` type stays in a client-only mock file for now**, with a stable `id` from the start. Flagged for feature 20 to consolidate into `client/src/lib/types.ts` and delete the mock file — same pattern trends/scripts/calendar all followed when real data landed.
 
 ## Problems solved
 
-- **Voyage AI 429 rate limiting (3 RPM on accounts with no payment method on file).** A single ingest run (3 docs) + 1 verify query = 4 calls, always tripping the cap on the 4th. Fixed with retry-with-backoff in `embed()` (honors `Retry-After` header when sent, else 20s default); tuned from 3→5 max retries after live testing showed 3×20s (60s) wasn't reliably enough headroom against a fresh 60s window immediately following 3 back-to-back calls.
-- **The Atlas Vector Search index from feature 02 had silently disappeared** (`listSearchIndexes()` returned `[]`). Developer's diagnosis, fits the evidence exactly: Atlas shared-tier clusters auto-pause after ~60 days idle; data and normal indexes survive a pause/resume, but Search/Vector Search indexes run on a separate search-node process and can fail to come back. Benign — recovered by re-running the already-idempotent `npm run db:setup-search-index` (feature 02, deliberately kept out of the boot path for exactly this kind of recovery), then polling `listSearchIndexes()` until `queryable: true`. No code change needed for this specific incident; the feature-20 follow-up above exists so a *future* silent recurrence surfaces clearly instead of masquerading as "no matching documents."
-- **`logger.ts`'s `JSON.stringify(someError)` silently produces `"{}"`** (Error's `message`/`stack` are non-enumerable own properties) — this masked the real cause of two consecutive ingest-script failures (the 429, then the missing index) until diagnosed via an ad hoc script that bypassed the logger entirely. Fixed with a `serializeMeta()` helper that special-cases `Error` instances. Affects every feature's error logging going forward — disclosed in `/review` as an out-of-plan change; developer reviewed and confirmed keeping it.
-- **`run-ingest.ts`'s original `main()` only closed the DB connection on success**, leaving the process hanging forever on any error (a genuine `.catch()`-without-`.finally()` bug, caught while debugging the above). Fixed to match the established `.catch().finally(() => closeDatabaseConnection())` pattern already used in `run-daily-trends-test.ts`.
+- `/review` caught two precedent deviations before they shipped, both fixed:
+  1. `ContractsPage.tsx` originally had an empty-state branch that was unreachable dead code (`MOCK_CONTRACTS` is a fixed 3-item array) — and directly contradicted the project's own settled precedent (`TrendsPage.tsx` shipped with no empty check in its mock-only feature 06; feature 10's `/code-review` explicitly ruled that empty-state branches belong with real fetching, not mock-only UI). Removed.
+  2. The disabled "Download PDF" chip originally had a `title` tooltip explaining itself — a new, undocumented pattern (`CalendarGrid`'s disabled chevrons have no tooltip). Dropped to match precedent exactly.
 
 ## Current state
 
-- **Feature 18 complete, reviewed (0 blocking issues), ticked in `progress-tracker.md`.** `tsc -b --noEmit` clean on `server/` throughout, including after all fix passes.
-- Verified live against the real stack, not mocked: `npm run rag:ingest` run twice — first run ingested all 3 fixtures and the retrieval check correctly returned `rate-card.md` top-1 (score 0.799 vs. 0.71/0.69 for the two contracts) for a rates question, proving topical correctness; second run confirmed idempotency (chunk count stayed at 3, not 6).
-- Phase 6 (features 15-17) deferred in the plan; Phase 7 in progress (18 done, 19/20/21 pending); Phase 8 (Briefing, was 21) and Phase 9 (Settings/Empty States, was 22/23) renumbered to 22/23/24.
-- **Repo state:** branch `vectorIndex` (per git status at session start), off `main`. Nothing committed by me this session — developer commits their own work, per established pattern.
-- No dev servers were running this session (backend-script-only feature); nothing to stop.
+- **Feature 19 complete, reviewed (0 issues after fixes), ticked in `progress-tracker.md`.** `tsc -b --noEmit` clean on `client/`.
+- Verified live via Playwright: `/contracts` screenshotted at all 3 responsive breakpoints, zero console/page errors. Click-through confirmed "Edit terms ↗" prefills chat with its exact bespoke prompt and the prefill clears on reload; "Download PDF" confirmed visibly and functionally disabled.
+- Repo state: branch `contractsPanel`. Nothing committed by me this session — developer commits their own work, per established pattern.
+- No dev servers left running (both the Vite dev server used for verification and its Playwright driver were stopped after testing).
 
 ## Next session starts with
 
-**Feature 19 — Contracts Panel (Full UI, Mock)**, per `build-plan.md` Phase 7: contract list cards (brand, deal summary, status badge, "Download PDF", "Edit terms"), mock contract cards, no backend work yet. Run `/architect` first per the project's loop.
+**Feature 20 — Contracts Agent (Retrieve, Draft, PDF)**, per `build-plan.md` Phase 7: `server/src/rag/retrieve.ts` (vector search top-k), `server/src/agents/contracts-agent.ts` (LLM drafts grounded only in retrieved chunks, explicit "no results" vs "index missing" distinction per the follow-up recorded in feature 18), `server/src/services/pdf.ts` (pdf-lib rendering → GridFS), `POST /api/contracts/draft`, `GET /api/contracts`, `GET /api/contracts/:id/pdf`. Also the point where `Contract`'s type gets consolidated into shared `types.ts` and `mock-contracts.ts` is deleted, and `ContractsPage.tsx` gets real loading/error/empty states (matching `TrendsPage.tsx`'s pattern). Run `/architect` first per the project's loop.
 
 ## Open questions
 
-- Whether/how to detect a silently-dropped Atlas Search index proactively (e.g. a boot-time or scheduled check) rather than only discovering it when a feature happens to query it — not raised as a requirement yet, just worth considering given it already happened once.
+- Whether/how to detect a silently-dropped Atlas Search index proactively — carried over from feature 18, unaddressed.
 - `@langchain/google` still pre-1.0 (0.2.x) — carried over from prior sessions, no action needed yet.
 - Whether the dev/test Google Calendar (service-account-owned "tester" calendar) gets swapped for Sofia's real shared calendar before production — carried over, unaddressed.
-
+- Whether a self-explaining-disabled-control pattern (tooltip on disabled buttons) should become a deliberate app-wide decision later — raised during this feature's `/review`, deliberately not decided now.

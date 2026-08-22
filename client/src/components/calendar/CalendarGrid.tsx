@@ -46,7 +46,7 @@ export function CalendarGrid({ events }: Props) {
       </div>
       <div className="mb-4 grid grid-cols-7 gap-0.5">
         {WEEKDAY_LABELS.map((label) => (
-          <div key={label} className="p-1 text-center text-[10px] tracking-[0.05em] text-text-secondary uppercase">
+          <div key={label} className="p-1 text-center text-[10px] tracking-wider text-text-secondary uppercase">
             {label}
           </div>
         ))}
