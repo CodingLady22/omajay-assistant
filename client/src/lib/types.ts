@@ -100,3 +100,15 @@ export type Contract = {
   status: ContractStatus;
   created_at: string;
 };
+
+export type DocType = "rate_card" | "contract";
+
+// Mirrors server/src/rag/ingest.ts's `listDocuments()` return shape — one
+// row per distinct `source` (a document is a group of chunks, not a row of
+// its own), uploaded_at as a string.
+export type DocumentSummary = {
+  source: string;
+  doc_type: DocType;
+  chunk_count: number;
+  uploaded_at: string;
+};

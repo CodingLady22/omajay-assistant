@@ -284,6 +284,8 @@ Approved dependencies:
 - `mongodb` — database + GridFS + Atlas Vector Search
 - `zod` — validation
 - `pdf-lib` — contract PDFs
+- `pdf-parse` — extracts text from her uploaded rate-card/contract PDFs (feature 21); pairs with `pdf-lib`'s write-only PDFs
+- `multer` — multipart file upload handling for the document-upload route (feature 21), memory storage only (no disk writes)
 - `node-cron` — scheduling (added feature 09)
 - `googleapis` — Google Calendar
 - `axios` or native `fetch` — HTTP to WhatsApp / Instagram / YouTube
