@@ -1,6 +1,6 @@
-import type { CalendarEvent, Script, Trend } from "@/lib/types";
+import type { CalendarEvent, Contract, Script, Trend } from "@/lib/types";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
 export type ApiResponse<T> = { success: true; data: T } | { success: false; error: string };
 
@@ -50,4 +50,8 @@ export async function discardCalendarEvent(eventId: string): Promise<ApiResponse
     method: "POST",
     body: JSON.stringify({ eventId }),
   });
+}
+
+export async function getContracts(): Promise<ApiResponse<Contract[]>> {
+  return request("/api/contracts");
 }

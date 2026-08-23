@@ -6,6 +6,7 @@ import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import calendarRouter from "@/routes/calendar";
 import chatRouter from "@/routes/chat";
+import contractsRouter from "@/routes/contracts";
 import scriptsRouter from "@/routes/scripts";
 import trendsRouter from "@/routes/trends";
 
@@ -26,6 +27,7 @@ async function bootstrap(): Promise<void> {
   app.use("/api/trends", trendsRouter);
   app.use("/api/scripts", scriptsRouter);
   app.use("/api/calendar", calendarRouter);
+  app.use("/api/contracts", contractsRouter);
 
   app.listen(env.PORT, () => {
     logger.info("index", `Server listening on port ${env.PORT}`);

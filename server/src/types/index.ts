@@ -170,11 +170,33 @@ export type DocumentChunk = {
   created_at: Date;
 };
 
+// A single deliverable line grounded from the rate card / a past contract.
+// `rate` is null when no matching rate was found in retrieved documents —
+// never a guessed/estimated figure.
+export type ContractDeliverable = {
+  name: string;
+  rate: string | null;
+};
+
+// Every field here is null when retrieval didn't cover it — the hard "never
+// invent a rate or term" rule, enforced field-by-field rather than only at
+// the whole-draft level. Values that ARE present are copied verbatim from a
+// retrieved chunk, not paraphrased/recalculated.
+export type ContractTerms = {
+  deliverables: ContractDeliverable[];
+  totalFee: string | null;
+  paymentTerms: string | null;
+  usageRights: string | null;
+  exclusivity: string | null;
+  timeline: string | null;
+  revisions: string | null;
+};
+
 export type ContractDoc = {
   _id?: ObjectId;
   brand: string;
   deal_summary: string;
-  terms: Record<string, unknown>;
+  terms: ContractTerms;
   pdf_path: string;
   sources: string[];
   status: "draft" | "sent";

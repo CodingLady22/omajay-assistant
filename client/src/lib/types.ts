@@ -67,3 +67,36 @@ export type CalendarEvent = {
   color: EventColor;
   status: "confirmed" | "proposed";
 };
+
+export type ContractStatus = "draft" | "sent";
+
+export type ContractDeliverable = {
+  name: string;
+  rate: string | null;
+};
+
+// Every field null when retrieval didn't cover it — mirrors
+// server/src/types/index.ts's ContractTerms exactly (the hard "never invent
+// a rate or term" rule, enforced per-field).
+export type ContractTerms = {
+  deliverables: ContractDeliverable[];
+  totalFee: string | null;
+  paymentTerms: string | null;
+  usageRights: string | null;
+  exclusivity: string | null;
+  timeline: string | null;
+  revisions: string | null;
+};
+
+// Mirrors server/src/types/index.ts's `ContractDoc` (the `contracts`
+// collection schema) as it arrives over JSON — _id/created_at as strings.
+export type Contract = {
+  _id?: string;
+  brand: string;
+  deal_summary: string;
+  terms: ContractTerms;
+  pdf_path: string;
+  sources: string[];
+  status: ContractStatus;
+  created_at: string;
+};
