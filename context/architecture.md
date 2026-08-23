@@ -100,7 +100,8 @@ Both surfaces hit the same REST endpoints. The same orchestrator runs regardless
 │   │   ├── client.ts                  → MongoDB connection (singleton)
 │   │   ├── collections.ts             → Typed collection accessors
 │   │   ├── indexes.ts                 → Index setup incl. vector index
-│   │   └── profile.ts                 → getProfile() — shared across trends-agent, content-agent, jobs/*
+│   │   ├── profile.ts                 → getProfile() — shared across trends-agent, content-agent, jobs/*
+│   │   └── gridfs.ts                  → GridFS upload/download/delete for contract PDFs
 │   │
 │   ├── lib/
 │   │   ├── llm.ts                     → LLM client (Gemini for now) — single source of model config
@@ -390,13 +391,15 @@ Drafted contracts.
 | _id         | ObjectId |                                        |
 | brand       | string   |                                        |
 | deal_summary| string   | What the deal is                       |
-| terms       | object   | Structured terms used in the draft     |
-| pdf_path    | string   | Stored PDF location / GridFS id        |
-| sources     | string[] | Which documents grounded the draft     |
+| terms       | ContractTerms | Structured, per-field-groundable terms — see below |
+| pdf_path    | string   | GridFS file id (bucket `contract_pdfs`)|
+| sources     | string[] | `documents.source` filenames that grounded the draft |
 | status      | string   | "draft" \| "sent"                      |
 | created_at  | Date     |                                        |
 
 Index: compound `{ brand: 1, status: 1 }` (non-unique) — supports per-brand draft lookups.
+
+`ContractTerms` (feature 20): `{ deliverables: { name: string; rate: string | null }[]; totalFee: string | null; paymentTerms: string | null; usageRights: string | null; exclusivity: string | null; timeline: string | null; revisions: string | null }`. Every field is `null` when retrieval didn't cover it — the "never invent a rate or term" rule enforced per-field, not just at the whole-draft level. Any non-null value is copied verbatim from a retrieved `documents` chunk, never paraphrased or recalculated.
 
 ### `briefings`
 
