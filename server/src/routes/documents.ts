@@ -9,7 +9,51 @@ import { ingestDocument, listDocuments, removeDocument } from "@/rag/ingest";
 const router = Router();
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_UPLOAD_BYTES } });
+const ALLOWED_EXTENSIONS = [".pdf", ".txt", ".md"];
+
+// The client's <input accept> is only a browser hint — anything can still
+// reach this route directly. Rejected in multer's fileFilter (before the
+// body is even buffered) rather than after ingest, so a disallowed file
+// never gets a chance to become a real embedded chunk in the RAG corpus.
+class UnsupportedFileTypeError extends Error {
+  constructor(filename: string) {
+    super(`Unsupported file type for "${filename}" — only PDF, .txt, and .md are accepted.`);
+    this.name = "UnsupportedFileTypeError";
+  }
+}
+
+function hasAllowedExtension(filename: string): boolean {
+  const lower = filename.toLowerCase();
+  return ALLOWED_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_UPLOAD_BYTES },
+  fileFilter: (_req, file, cb) => {
+    if (hasAllowedExtension(file.originalname)) {
+      cb(null, true);
+    } else {
+      cb(new UnsupportedFileTypeError(file.originalname));
+    }
+  },
+});
+
+// Runs multer as a promise instead of route middleware. multer failures
+// (oversized file, a fileFilter rejection) happen before an Express route
+// handler runs at all — as middleware, they'd skip this route's try/catch
+// and fall through to Express's default HTML error handler, which leaks a
+// raw stack trace with server filesystem paths to the client. Awaiting it
+// inside the handler's own try/catch keeps every failure on the same
+// { success, error } JSON path as the rest of this codebase.
+function runUploadMiddleware(req: Request, res: Response): Promise<void> {
+  return new Promise((resolve, reject) => {
+    upload.single("file")(req, res, (error: unknown) => {
+      if (error) reject(error);
+      else resolve();
+    });
+  });
+}
 
 const docTypeSchema = z.enum(["rate_card", "contract"]);
 const sourceParamSchema = z.object({ source: z.string().min(1) });
@@ -24,8 +68,10 @@ router.get("/", async (_req: Request, res: Response) => {
   }
 });
 
-router.post("/upload", upload.single("file"), async (req: Request, res: Response) => {
+router.post("/upload", async (req: Request, res: Response) => {
   try {
+    await runUploadMiddleware(req, res);
+
     if (!req.file) {
       return res.status(400).json({ success: false, error: "No file uploaded" });
     }
@@ -36,8 +82,15 @@ router.post("/upload", upload.single("file"), async (req: Request, res: Response
 
     return res.json({ success: true, data: { source: req.file.originalname, chunk_count: chunkCount } });
   } catch (error) {
-    if (error instanceof EmptyExtractionError) {
+    if (error instanceof UnsupportedFileTypeError || error instanceof EmptyExtractionError) {
       return res.status(422).json({ success: false, error: error.message });
+    }
+    if (error instanceof multer.MulterError) {
+      const message =
+        error.code === "LIMIT_FILE_SIZE"
+          ? `File too large — max ${MAX_UPLOAD_BYTES / (1024 * 1024)}MB.`
+          : `Upload failed: ${error.message}`;
+      return res.status(400).json({ success: false, error: message });
     }
     logger.error("routes/documents", "Failed to upload document", error);
     return res.status(500).json({ success: false, error: "Failed to upload document" });

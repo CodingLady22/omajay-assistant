@@ -1,69 +1,62 @@
-# Memory — Feature 20: Contracts Agent (Retrieve, Draft, PDF)
+# Memory — Feature 21: Document Management UI
 
 Last updated: 2026-08-23
 
 ## What was built
 
-Feature 20 shipped via the full loop: `/architect` → build → `/review` (0 blocking issues) → ticked in `progress-tracker.md` → `/imprint` on `ContractCard`. Full RAG-grounded contract drafting pipeline, real data replacing feature 19's mock UI.
+Feature 21 shipped via the full loop: `/architect` → build → `/review` (found 1 Critical + 1 Important + 2 Minor, all fixed and re-verified live) → ticked in `progress-tracker.md` → `/imprint` on the 3 new components. Real document upload/list/delete UI nested in the Contracts panel, replacing feature 18's script-driven mock ingest as the production path.
 
 **Server — new:**
-- `server/src/rag/retrieve.ts` — `retrieveContext(query, k)`, returns `{status: "ok", chunks, sources} | {status: "empty"} | {status: "index_missing"}`. Includes a relevance-floor filter (`MIN_RELEVANCE_SCORE = 0.6`) and an Atlas index-existence check to distinguish the two empty states.
-- `server/src/db/gridfs.ts` — `uploadPdf`/`downloadPdf`/`deletePdf`, GridFS bucket `contract_pdfs`.
-- `server/src/services/pdf.ts` — `renderContractPdf(contract): Promise<Buffer>` via pdf-lib, pure rendering, no I/O.
-- `server/src/routes/contracts.ts` — `POST /draft`, `GET /`, `GET /:id/pdf`, mounted in `index.ts`.
-- `server/src/agents/run-contracts-test.ts` — permanent live-verify script (`npm run contracts:test`).
+- `server/src/rag/parse.ts` — `extractText(buffer, filename)`: `.pdf` → `pdf-parse` (v2's class-based `new PDFParse({ data }).getText()` API, not the old v1 function signature), else UTF-8 decode. Throws `EmptyExtractionError` when extracted text is under 20 non-whitespace chars (scanned/image-only PDF guard).
+- `server/src/routes/documents.ts` — `GET /`, `POST /upload`, `DELETE /:source`, mounted at `/api/documents`. Upload runs `multer` (memory storage, 10MB limit, `fileFilter` extension whitelist `.pdf`/`.txt`/`.md`) as a promise inside the route's own `try/catch` rather than as middleware — see Problems solved.
 
 **Server — modified:**
-- `server/src/types/index.ts` — `ContractDoc.terms` retyped from `Record<string, unknown>` to structured `ContractTerms` (`ContractDeliverable[]` + 6 nullable term fields).
-- `server/src/agents/contracts-agent.ts` — full rewrite: `extractDealDetails`, `draftTerms`, `draftContract` (shared by chat + direct route), `getStoredContracts`, `getContractPdf`, `contractsAgent`.
-- `server/src/index.ts` — contracts router mounted.
-- `server/package.json` — `pdf-lib` dependency added, `contracts:test` script added.
+- `server/src/rag/ingest.ts` — `listDocuments()` added: `$group`-by-`source` aggregation (a "document" is a group of `DocumentChunk` rows, no dedicated per-document record).
+- `server/src/index.ts` — documents router mounted.
+- `server/package.json` — `multer`, `pdf-parse` added.
+
+**Client — new:**
+- `client/src/components/common/ConfirmDialog.tsx` — reusable confirm modal, first real use of `--color-backdrop`. Generic props (`title`/`message`/`confirmLabel`/`onConfirm`/`onCancel`/`isSubmitting`/`error`) so calendar-add/DM-send-approval can reuse it later.
+- `client/src/components/documents/DocumentRow.tsx`, `UploadDocumentForm.tsx`.
 
 **Client — modified:**
-- `client/src/lib/types.ts` — `ContractStatus`/`ContractDeliverable`/`ContractTerms`/`Contract` added.
-- `client/src/lib/api.ts` — `getContracts()` added, `API_BASE_URL` exported (needed by `ContractCard`'s real download link).
-- `client/src/components/contracts/ContractCard.tsx` — reads real fields (`deal_summary` not `dealSummary`), "Download PDF" un-disabled into a real `<a href="/api/contracts/:id/pdf">`, "Edit terms" prompt now derived from `contract.brand`.
-- `client/src/pages/ContractsPage.tsx` — rewritten for real fetch with loading/error/empty states (matches `TrendsPage.tsx`'s pattern).
+- `client/src/lib/types.ts` — `DocType`, `DocumentSummary` added.
+- `client/src/lib/api.ts` — `getDocuments`/`uploadDocument`/`deleteDocument` added. `uploadDocument` bypasses the shared `request()` helper (multipart needs `fetch` to set its own `Content-Type` boundary).
+- `client/src/pages/ContractsPage.tsx` — restructured so "Source Documents" renders independently of the contracts list's loading/error/empty state (it previously early-returned before a second section could ever render).
 
-**Client — deleted:**
-- `client/src/lib/mock-contracts.ts`
-
-**Docs updated:** `context/architecture.md` (`contracts` schema section + `ContractTerms` shape, `db/gridfs.ts` added to folder tree), `context/progress-tracker.md` (ticked, decisions + notes recorded), `context/ui-registry.md` (`ContractCard` entry updated for the new download-link pattern).
+**Docs updated:** `context/architecture.md` (folder tree — new files plus retroactively adding `Chip.tsx`, which was missing since feature 11), `context/code-standards.md` (`multer`/`pdf-parse` added to approved deps), `context/progress-tracker.md` (ticked, decisions + notes recorded), `context/ui-registry.md` (3 new entries).
 
 ## Decisions made
 
-- **Relevance floor added to retrieval (not in the original plan)** — `$vectorSearch` has no built-in cutoff, so a zero-hit check alone never fires "empty" once any documents exist. Measured live: a genuine deal query scored 0.82/0.71/0.67 across the 3 fixture docs; a domain-unrelated query scored only 0.58/0.58/0.57. `MIN_RELEVANCE_SCORE = 0.6` sits cleanly in that gap.
-- **Confirmed live that `$vectorSearch` against a nonexistent index name returns `[]`, not a throw** — this is what makes the `index_missing` branch actually reachable in the real failure case, not just theoretical.
-- **Draft prompt explicitly forbids cross-brand contamination** — a past contract chunk's figures are only used if its stated brand matches the brand asked about; the general rate card (no brand attached) applies to any brand.
-- **Grounding is enforced per-field, not per-draft** — every `ContractTerms` field is independently nullable; the PDF renders each null as "Not on file...". Verified live: the real Velour draft correctly left itemized deliverable rates null (the real past contract only stated one flat total) while still populating `totalFee`.
-- **No approval gate for contract drafting** — confirmed during `/architect`: the hard safety rule only requires grounding, not human sign-off before a draft exists. Every contract is created `status: "draft"`.
-- **`POST /api/contracts/draft` and the chat path share one `draftContract()` function**, extraction only happens on the chat path — same relationship `calendar-agent.ts`'s `proposeEvent`/`confirmProposedEvent` have.
-- **WhatsApp delivery still skipped** (feature 05 not built) — PDF served only via the dashboard route, same standing deferral since feature 06.
+- **Real PDF support, not text-only** — her actual rate cards/contracts are PDFs; text-only would've been a demo, not a usable tool. `pdf-parse` added as the read-side pair to the existing write-only `pdf-lib`.
+- **Server-side extension whitelist, not just the client's `accept=` hint** — the client attribute is advisory only; enforced via multer's `fileFilter`, which rejects before the file is even buffered.
+- **multer errors handled inside the route's own `try/catch`**, not left as bare middleware — keeps every failure (size limit, extension rejection, real ingest error) on the same `{ success, error }` JSON shape as the rest of the app.
+- **First real use of `--color-backdrop` for a confirm modal** — deleting a document is real, hard-to-reverse data loss (unlike `EventItem`'s Discard, which only drops an unconfirmed proposal), warranting the confirm-modal treatment the token was reserved for back in feature 04.
+- **`listDocuments()` lives in `rag/ingest.ts`**, not a new file — same "reusable, exported" category as `ingestDocument`/`removeDocument`.
 
 ## Problems solved
 
-- Initial `MIN_RELEVANCE_SCORE = 0.5` guess was wrong — a live test with an aerospace-industry query still scored 0.58 against the beauty-contract fixtures (all short business documents share baseline vocabulary similarity). Measured real scores for both a relevant and an irrelevant query before picking 0.6, rather than guessing a threshold and hoping.
-- An early failed test run (before the threshold fix) left a stray "Orbital Dynamics Aerospace" contract + GridFS file in the real database, because that test's cleanup only ran in a path that was never reached. Found and deleted manually before final verification; the test script itself doesn't have this gap since `testGroundedDraft`'s cleanup is now provably reached in all cases.
-- TypeScript build errors from a mongodb driver version mismatch: `GridFSBucketWriteStreamOptions` doesn't have a top-level `contentType` (moved to `metadata.contentType`); `ListSearchIndexesCursor` is typed as only `{name: string}` even though Atlas actually returns `queryable` too — worked around with a documented type assertion (`SearchIndexStatus`), not a runtime-unsafe guess.
-- Caught during self-review (before the formal `/review` pass) that I'd verified `draftContract()` directly and via chat, but never actually hit the `POST /api/contracts/draft` HTTP route itself — closed that gap live before reporting the review as complete.
+- **Multer's own errors bypass a route's `try/catch` when used as middleware.** An 11MB upload against the 10MB limit fell through to Express's default HTML error handler and leaked a raw stack trace with real server filesystem paths — caught in `/review`. Fixed by wrapping `upload.single("file")` in a promise and `await`-ing it inside the handler.
+- **An arbitrary binary decoded as "UTF-8 text" often still clears the empty-extraction guard's 20-char floor** — a `.exe` of random bytes was accepted and actually ingested as a real embedded chunk with `200 success` before the extension whitelist was added. Verified live, both before (bug present) and after (fixed, 422) the fix.
+- **`pdf-parse` v2's API is class-based** (`new PDFParse({ data: buffer }).getText()`), not the `pdf(buffer).then(...)` function signature most training data / v1 docs assume — confirmed against the actually-installed package's type declarations before writing `rag/parse.ts`.
 
 ## Current state
 
-- **Feature 20 complete, reviewed (0 blocking issues), ticked in `progress-tracker.md`, `/imprint` run.** `tsc -b --noEmit` clean on both `server/` and `client/`.
-- Verified live end-to-end: `npm run contracts:test` (grounding matches the real fixture **verbatim** on every field, empty-retrieval correctly detected for an unrelated brand), a real chat round-trip, the direct `POST /api/contracts/draft` route (both a validation failure and a valid structured draft), `GET /api/contracts`, `GET /api/contracts/:id/pdf` (real PDF bytes, correct headers), and a Playwright pass on the real `/contracts` dashboard (zero console errors).
-- One legitimate "Velour Cosmetics" contract (created via a realistic chat-path test) was intentionally left in the real database as real usage data — same precedent feature 11 set for keeping real generated scripts. All other test artifacts were cleaned up.
-- One informational-only note from `/review`: `ContractCard.tsx`'s real download link duplicates `Chip`'s className as a literal string (documented in `ui-registry.md` as a candidate for future extraction, not urgent).
-- Repo state: branch `contractsAgent`. Nothing committed by me this session — developer commits their own work, per established pattern.
-- No dev servers left running (both server and client dev servers, and the Playwright driver, were stopped after verification).
+- **Feature 21 complete, reviewed (all 4 findings fixed and re-verified live), ticked in `progress-tracker.md`, `/imprint` run.** `tsc -b --noEmit` clean on both `server/` and `client/`.
+- Verified live end-to-end: real PDF + `.md` upload → ingested and listed; scanned/blank PDF → correctly 422s, not ingested; a real contract draft grounded verbatim against an uploaded PDF's figures; deleting that PDF via the confirm modal and re-drafting confirmed the deleted figures no longer surfaced and `sources` dropped the filename — **grounding verified at the retrieval level, not just the list UI**, per explicit instruction. Oversized upload and disallowed-extension upload both re-verified to return clean JSON errors after the review fixes.
+- Repo state: branch `documentManagementUI`. The user committed the initial build themselves mid-session (commit `cae32db feat: build document management UI`) — my subsequent 4 review-fix changes (multer error handling + extension whitelist in `routes/documents.ts`, comment + import fix in `UploadDocumentForm.tsx`) plus all doc updates are **uncommitted**, sitting on top of that commit. I have not committed anything this session, per standing instruction to only commit when asked.
+- No dev servers left running; all test artifacts (test contracts, test-uploaded documents) cleaned from the real database/GridFS afterward.
 
 ## Next session starts with
 
-**Feature 21 — Document Management UI**, per `build-plan.md` Phase 7: upload/list/delete UI nested in the Contracts panel, calling `rag/ingest.ts`'s already-exported `ingestDocument`/`removeDocument` functions (built in feature 18) directly. This is the point where her real rate cards/contracts replace the script-driven mock fixtures as the production ingestion path. Run `/architect` first per the project's loop.
+**Feature 22 — Briefing Agent + Scheduled Send**, per `build-plan.md` Phase 8: gathers today's events, unfinished script drafts, unsent contracts, unreplied brand DMs; composes a short WhatsApp-style briefing. Two things flagged in the plan to actually do this time: (1) move `getProfile()` out of `agents/trends-agent.ts` into a shared accessor now that this becomes a third consumer (deferred since feature 09's `/review`). (2) Since feature 05 (WhatsApp) is still deferred, delivery must go behind a pluggable seam (e.g. `deliverBriefing(text)`) rather than calling `sendWhatsApp` directly — sending to the dashboard/console for now, swapped to real WhatsApp once feature 05 lands. Run `/architect` first per the project's loop.
 
 ## Open questions
 
-- Whether/how to detect a silently-dropped Atlas Search index *proactively* (vs. reactively at query time, which feature 20 now does) — carried over from feature 18, still unaddressed.
-- `@langchain/google` still pre-1.0 (0.2.x) — carried over from prior sessions, no action needed yet.
-- Whether the dev/test Google Calendar (service-account-owned "tester" calendar) gets swapped for Sofia's real shared calendar before production — carried over, unaddressed.
-- Whether a self-explaining-disabled-control pattern (tooltip on disabled buttons) should become a deliberate app-wide decision later — carried over from feature 19, still undecided.
-- Whether `ContractCard`'s duplicated download-link className should be extracted into a shared link-chip component now, or wait for a third occurrence (feature 11's precedent threshold) — raised during this feature's `/review`, deliberately left open.
+- Whether the uncommitted review-fix changes on `documentManagementUI` should be committed (and whether as part of the same commit or a separate one) — left to the developer, not committed by me.
+- Whether/how to detect a silently-dropped Atlas Search index proactively — carried over from feature 18/20, still unaddressed.
+- `@langchain/google` still pre-1.0 (0.2.x) — carried over, no action needed yet.
+- Whether the dev/test Google Calendar gets swapped for Sofia's real shared calendar before production — carried over, unaddressed.
+- Whether a self-explaining-disabled-control pattern (tooltip on disabled buttons) should become a deliberate app-wide decision — carried over from feature 19, still undecided.
+- Whether `ContractCard`'s duplicated download-link className should be extracted into a shared link-chip component — carried over from feature 20, still open.
+- The `<select>` in `UploadDocumentForm` deviates slightly from `ui-tokens.md`'s Input spec (padding, no focus ring) — flagged in `ui-registry.md` for whenever a real `<select>` pattern gets formalized elsewhere; not corrected in isolation this feature.

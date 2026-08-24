@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import type { FormEvent } from "react";
 import { uploadDocument } from "@/lib/api";
 import type { DocType } from "@/lib/types";
 
@@ -17,7 +18,7 @@ export function UploadDocumentForm({ onUploaded }: Props) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const file = fileInputRef.current?.files?.[0];
     if (!file) {
@@ -55,6 +56,9 @@ export function UploadDocumentForm({ onUploaded }: Props) {
         />
         <select
           value={docType}
+          // Safe by construction, not by runtime narrowing: every <option> value
+          // below is drawn from DOC_TYPE_OPTIONS, so the DOM's always-`string`
+          // event.target.value can only ever actually be a DocType.
           onChange={(event) => setDocType(event.target.value as DocType)}
           disabled={isSubmitting}
           className="rounded-md border-[0.5px] border-border bg-surface px-2 py-1.5 text-[12px] text-text-primary"
