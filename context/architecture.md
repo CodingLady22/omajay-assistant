@@ -64,7 +64,8 @@ Both surfaces hit the same REST endpoints. The same orchestrator runs regardless
 │   │   ├── scripts.ts                 → GET/POST /api/scripts
 │   │   ├── calendar.ts                → GET /api/calendar, POST /api/calendar/propose
 │   │   ├── dms.ts                     → GET /api/dms, POST /api/dms/draft-reply
-│   │   └── contracts.ts               → POST /api/contracts/draft, GET /api/contracts
+│   │   ├── contracts.ts               → POST /api/contracts/draft, GET /api/contracts
+│   │   └── documents.ts               → GET/POST /api/documents, DELETE /api/documents/:source
 │   │
 │   ├── agents/                        → LangGraph graph — the brain
 │   │   ├── graph.ts                   → Graph definition, nodes + edges
@@ -87,7 +88,8 @@ Both surfaces hit the same REST endpoints. The same orchestrator runs regardless
 │   │   └── pdf.ts                     → pdf-lib contract rendering
 │   │
 │   ├── rag/                           → Retrieval over her private documents
-│   │   ├── ingest.ts                  → Chunk + embed rate cards / contracts
+│   │   ├── ingest.ts                  → Chunk + embed rate cards / contracts, list/remove by source
+│   │   ├── parse.ts                   → Extract text from an uploaded file (PDF via pdf-parse, else UTF-8)
 │   │   ├── retrieve.ts                → Vector search query
 │   │   └── embeddings.ts              → Embedding model client
 │   │
@@ -137,8 +139,14 @@ Both surfaces hit the same REST endpoints. The same orchestrator runs regardless
     │   │   │   └── EventItem.tsx
     │   │   ├── dms/
     │   │   │   └── DmItem.tsx
-    │   │   └── contracts/
-    │   │       └── ContractCard.tsx
+    │   │   ├── contracts/
+    │   │   │   └── ContractCard.tsx
+    │   │   ├── documents/
+    │   │   │   ├── DocumentRow.tsx
+    │   │   │   └── UploadDocumentForm.tsx
+    │   │   └── common/
+    │   │       ├── Chip.tsx
+    │   │       └── ConfirmDialog.tsx
     │   └── pages/
     │       ├── ChatPage.tsx
     │       ├── TrendsPage.tsx

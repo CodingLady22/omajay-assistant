@@ -1,4 +1,4 @@
-import type { CalendarEvent, Contract, Script, Trend } from "@/lib/types";
+import type { CalendarEvent, Contract, DocType, DocumentSummary, Script, Trend } from "@/lib/types";
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -54,4 +54,32 @@ export async function discardCalendarEvent(eventId: string): Promise<ApiResponse
 
 export async function getContracts(): Promise<ApiResponse<Contract[]>> {
   return request("/api/contracts");
+}
+
+export async function getDocuments(): Promise<ApiResponse<DocumentSummary[]>> {
+  return request("/api/documents");
+}
+
+// Not routed through request() — a multipart body needs fetch to set its own
+// Content-Type (with the boundary), which request()'s hardcoded
+// "application/json" header would clobber.
+export async function uploadDocument(
+  file: File,
+  docType: DocType
+): Promise<ApiResponse<{ source: string; chunk_count: number }>> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("doc_type", docType);
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/documents/upload`, { method: "POST", body: formData });
+    return (await res.json()) as ApiResponse<{ source: string; chunk_count: number }>;
+  } catch (error) {
+    console.error("[lib/api]", error);
+    return { success: false, error: "Couldn't reach the server — try again in a moment." };
+  }
+}
+
+export async function deleteDocument(source: string): Promise<ApiResponse<{ deletedCount: number }>> {
+  return request(`/api/documents/${encodeURIComponent(source)}`, { method: "DELETE" });
 }

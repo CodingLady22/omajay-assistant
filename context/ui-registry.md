@@ -303,3 +303,69 @@ The two action chips diverge from each other on purpose: **"Edit terms ↗"** is
 **2026-08-22 — `/review` caught two precedent deviations, both fixed.** (1) `ContractsPage.tsx` originally had an empty-state branch guarding `MOCK_CONTRACTS.length === 0` — unreachable dead code against a fixed 3-item array, and a direct contradiction of the project's own settled precedent: `TrendsPage.tsx` shipped with no empty check in its mock-only feature (06), and feature 10's `/code-review` explicitly ruled that an empty-state branch belongs with real fetching, not mock-only UI. Removed; will be added back in feature 20 alongside the real fetch, same as trends/scripts. (2) The disabled "Download PDF" chip originally carried a `title` tooltip explaining why it's disabled — no other disabled control in the app (`CalendarGrid`'s chevrons) does this. Dropped to match `CalendarGrid` exactly; a self-explaining-disabled-control pattern, if wanted, is a deliberate app-wide decision for later, not a one-off addition here.
 
 **2026-08-23 — real data wired in (feature 20); "Download PDF" un-disabled into a real link.** `contract.dealSummary`/`contract.editPrompt` (mock-only fields) are gone — the card now reads `contract.deal_summary` (real `ContractDoc` field) and derives the Edit-terms prompt from `contract.brand` instead of a bespoke per-item string, same pattern `TrendCard`/`ScriptCard` already use for real data. "Download PDF" is no longer `disabled` — it's now a real `<a href="/api/contracts/:id/pdf">`, since the PDF genuinely exists once feature 20's `services/pdf.ts` + GridFS landed. **New pattern, not yet a shared component:** because `Chip` only renders a `<button>` and a real file download needs an actual `<a>` (so `Content-Disposition: attachment` triggers a browser download instead of a client-side-router click), the anchor is styled with a literal `DOWNLOAD_LINK_CLASSNAME` string that duplicates `Chip`'s classes verbatim rather than extending `Chip` itself to polymorphically render as either tag. This is the second place in the codebase a chip-styled className exists outside `Chip` (the first being the 4 sites `Chip` itself was extracted from in feature 11) — if a third "chip-styled but must be a real `<a>`" case appears, that's the trigger to extract a shared link-chip variant, same threshold feature 11 used.
+
+---
+
+### ConfirmDialog
+
+File: client/src/components/common/ConfirmDialog.tsx
+Last updated: 2026-08-23
+
+| Property         | Class                                                              |
+| ---------------- | ------------------------------------------------------------------- |
+| Background       | scrim: `bg-backdrop/40` · dialog card: `bg-surface`                 |
+| Border            | `border-[0.5px] border-border` (dialog card)                        |
+| Border radius     | `rounded-lg` (dialog card)                                          |
+| Text — primary    | `text-text-primary` (title, 13px medium)                            |
+| Text — secondary  | `text-text-secondary` (message body, 12px, `leading-[1.55]`; also the failure-message line) |
+| Spacing           | `p-4` dialog padding · `p-4` scrim padding (so the card never touches the viewport edge on small screens) · `mt-1.5` title-to-message · `mt-3.5` message-to-actions · `gap-1.5` between Cancel/Confirm |
+| Hover state       | Confirm: `hover:opacity-85` (see Accent usage) · Cancel: standard `Chip` hover |
+| Shadow            | `shadow-shell` (the same floating-card shadow the app shell itself uses) |
+| Accent usage      | Confirm button: `bg-pink px-3 py-1.5 text-[11px] text-white rounded-md hover:opacity-85` — the canonical primary-button treatment, same family as `ChatPanel`'s send button and `EventItem`'s Confirm |
+
+**Pattern notes:**
+First real use of `--color-backdrop` for a confirm modal — the token was added in feature 04 specifically flagging "future confirm/approve modals (calendar add, DM send approval, contract review)" as its intended use, and this is that first modal. Built generically (`title`/`message`/`confirmLabel`/`onConfirm`/`onCancel`/`isSubmitting`/`error` props) so calendar-add and DM-send-approval can reuse it directly later instead of each inventing their own. No dedicated danger/destructive-action color was introduced for the Confirm button — it reuses the standard `bg-pink` primary treatment, consistent with `ui-tokens.md`'s closed palette and the same reasoning `EventItem`'s plain-secondary-text error line already established (no red/danger token exists yet, deferred to feature 24's unified error-styling pass). Clicking the backdrop closes the dialog (same as `Sidebar`'s mobile drawer) unless `isSubmitting` is true, in which case backdrop clicks are ignored so an in-flight request can't be dismissed mid-request.
+
+---
+
+### DocumentRow
+
+File: client/src/components/documents/DocumentRow.tsx
+Last updated: 2026-08-23
+
+| Property         | Class                                                              |
+| ---------------- | ------------------------------------------------------------------- |
+| Background       | `bg-surface`                                                        |
+| Border            | `border-[0.5px] border-border`                                      |
+| Border radius     | `rounded-md`                                                         |
+| Text — primary    | `text-text-primary` (source filename, 13px medium, `truncate`)      |
+| Text — secondary  | `text-text-secondary` (meta line, 11px — upload date + chunk count) |
+| Spacing           | `gap-2.5` row gap · `px-3 py-2.5` card padding · `mt-0.5` title-to-meta gap |
+| Hover state       | none on the row itself; Delete uses the standard `Chip` hover        |
+| Shadow            | none                                                                 |
+| Accent usage      | doc-type badge: `bg-info-bg text-info` (`px-1.75 py-0.5 text-[10px] font-normal rounded-full`) |
+
+**Pattern notes:**
+A `rounded-md` list row, matching `EventItem`'s precedent (list rows use the design's smaller radius; grid tiles like `TrendCard`/`ScriptCard`/`ContractCard` use `rounded-lg`) — not drift. The doc-type badge reuses the same neutral `bg-info-bg text-info` pill every other non-DM badge in the app uses (`ScriptCard`'s kind badge, `ContractCard`'s status badge, `EventItem`'s Pending badge) — the DM pink/green pair stays reserved for DM classification only. Delete opens `ConfirmDialog` rather than acting immediately — this is the first destructive (hard-to-reverse) row-level action in the app, distinct from `EventItem`'s Discard (which only drops an unconfirmed proposal, not real stored data), so it does not reuse the bare inline-Chip-click pattern.
+
+---
+
+### UploadDocumentForm
+
+File: client/src/components/documents/UploadDocumentForm.tsx
+Last updated: 2026-08-23
+
+| Property         | Class                                                              |
+| ---------------- | ------------------------------------------------------------------- |
+| Background       | form container: none (transparent) · file-input trigger: `file:bg-pink-light` · select: `bg-surface` |
+| Border            | form container: `border-[0.5px] border-dashed border-border` · select: `border-[0.5px] border-border` |
+| Border radius     | `rounded-md` (form container, file-input trigger, select, submit button) |
+| Text — primary    | `text-text-primary` (select text)                                   |
+| Text — secondary  | `text-text-secondary` (file-input placeholder text; also the failure-message line, same plain-secondary-text convention as every other panel's error state) |
+| Spacing           | `px-3 py-2.5` form padding · `gap-2` row gap · `mr-2` file-trigger-to-filename gap |
+| Hover state       | none on the file input/select; submit button: `hover:opacity-85`     |
+| Shadow            | none                                                                 |
+| Accent usage      | file-input trigger pseudo-button: `file:bg-pink-light file:text-pink` (mirrors the pink-light/pink pairing used elsewhere for a "soft" brand accent) · submit button: `bg-pink` white text, the canonical primary-button treatment |
+
+**Pattern notes:**
+The dashed border (`border-dashed`) is a new motif — no other container in the app uses it — chosen deliberately to read as a drop-zone/upload affordance since there's no existing "file upload" pattern to match and no design-HTML mock for this panel (same situation `ContractCard`/`ScriptCard` were already in). Any future upload control should reuse this dashed-border treatment rather than inventing a third variant. The native `<input type="file">` is styled via Tailwind's `file:` pseudo-element classes rather than a custom-styled trigger button + hidden input, since the plan didn't call for a bespoke drag-and-drop widget — the browser's own file picker is used, only re-skinned. The `<select>` deviates slightly from `ui-tokens.md`'s Input spec (`px-2 py-1.5` here vs. the documented `px-3 py-2`, and no `focus:border-pink-mid`) — a minor gap flagged for whenever a real `<select>`/dropdown pattern gets formalized elsewhere in the app; not corrected here since no other component's select exists yet to reconcile against.

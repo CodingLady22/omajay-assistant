@@ -87,3 +87,33 @@ export async function removeDocument(source: string): Promise<number> {
   const result = await collections.documents().deleteMany({ source });
   return result.deletedCount;
 }
+
+export type DocumentSummary = {
+  source: string;
+  doc_type: DocType;
+  chunk_count: number;
+  uploaded_at: Date;
+};
+
+// One row per distinct `source`, not per chunk — `documents` has no
+// dedicated per-document record, so "a document" is a group of chunk rows
+// sharing one `source`. `doc_type`/`uploaded_at` are pulled from the first
+// chunk in the group, since every chunk of one ingest shares both.
+export async function listDocuments(): Promise<DocumentSummary[]> {
+  return collections
+    .documents()
+    .aggregate<DocumentSummary>([
+      { $sort: { created_at: 1 } },
+      {
+        $group: {
+          _id: "$source",
+          doc_type: { $first: "$doc_type" },
+          chunk_count: { $sum: 1 },
+          uploaded_at: { $first: "$created_at" },
+        },
+      },
+      { $project: { _id: 0, source: "$_id", doc_type: 1, chunk_count: 1, uploaded_at: 1 } },
+      { $sort: { uploaded_at: -1 } },
+    ])
+    .toArray();
+}
