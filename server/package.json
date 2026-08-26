@@ -13,6 +13,7 @@
     "jobs:test": "tsx src/jobs/run-daily-trends-test.ts",
     "rag:ingest": "tsx src/rag/run-ingest.ts",
     "contracts:test": "tsx src/agents/run-contracts-test.ts",
+    "briefing:test": "tsx src/jobs/run-briefing-test.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

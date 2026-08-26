@@ -36,27 +36,65 @@ export async function getUpcomingEvents(days: number = DAYS_AHEAD): Promise<Cale
     .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
 }
 
-function isAllDay(event: CalendarEventView): boolean {
-  const start = new Date(event.start);
-  const end = new Date(event.end);
-  return start.getHours() === 0 && start.getMinutes() === 0 && end.getHours() === 23 && end.getMinutes() === 59;
+// All-day Google events are normalized (services/google-calendar.ts) to a
+// timezone-naive "YYYY-MM-DDT00:00:00" start / "YYYY-MM-DDT23:59:00" end —
+// there is no real zone attached to that string. Detecting it via a plain
+// suffix check (rather than constructing a Date and reading getHours()) means
+// this never depends on the server host's own default timezone to evaluate
+// correctly. Exported so briefing-agent.ts shares this instead of keeping
+// its own copy (this was previously duplicated in 3 places, including here).
+export function isEventAllDay(event: CalendarEventView): boolean {
+  return event.start.endsWith("T00:00:00") && event.end.endsWith("T23:59:00");
 }
 
-function formatEventLine(event: CalendarEventView): string {
-  const start = new Date(event.start);
-  const dateLabel = start.toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short" });
-  const timeLabel = isAllDay(event)
+// Returns the event's calendar date (YYYY-MM-DD) as it falls in `timezone`.
+// An all-day event's date is authoritative and has no timezone of its own —
+// read directly from the string rather than constructing a Date from a naive
+// "T00:00:00" value, which would force it through an ambient-timezone
+// interpretation (the server host's local zone) before any explicit
+// `timeZone` option could correct it. That was the root cause of the bug
+// this comment is attached to fixing: on a UTC host with profile.timezone
+// "Europe/Rome", an all-day event could resolve to the wrong calendar day.
+// Timed events carry a real UTC-offset `dateTime` from Google, so `new
+// Date()` on those is safe and correctly projected into `timezone` below.
+export function getEventDateKey(event: CalendarEventView, timezone: string): string {
+  if (isEventAllDay(event)) {
+    return event.start.slice(0, 10);
+  }
+  return new Date(event.start).toLocaleDateString("en-CA", { timeZone: timezone });
+}
+
+// en-CA is used purely because it formats toLocaleDateString as YYYY-MM-DD,
+// which compares correctly as a plain string — not a locale/region choice.
+export function todayDateKey(timezone: string): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: timezone });
+}
+
+function formatEventLine(event: CalendarEventView, timezone: string): string {
+  const dateLabel = isEventAllDay(event)
+    // Format the calendar date directly, anchored to UTC midnight, rather
+    // than reinterpreting the naive local string in `timezone` — see
+    // isEventAllDay's comment. A real all-day date has no timezone of its
+    // own; routing it through one is exactly the bug being avoided here.
+    ? new Date(`${event.start.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-US", {
+        timeZone: "UTC",
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+      })
+    : new Date(event.start).toLocaleDateString("en-US", { timeZone: timezone, weekday: "short", day: "numeric", month: "short" });
+  const timeLabel = isEventAllDay(event)
     ? "All day"
-    : start.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+    : new Date(event.start).toLocaleTimeString("en-US", { timeZone: timezone, hour: "2-digit", minute: "2-digit", hour12: false });
   const locationSuffix = event.location ? ` (${event.location})` : "";
   return `${dateLabel} · ${timeLabel} — ${event.title}${locationSuffix}`;
 }
 
-function buildEventsSummary(events: CalendarEventView[]): string {
+function buildEventsSummary(events: CalendarEventView[], timezone: string): string {
   if (events.length === 0) {
     return "You don't have anything on your calendar for the next two weeks.";
   }
-  const lines = events.slice(0, 8).map(formatEventLine);
+  const lines = events.slice(0, 8).map((event) => formatEventLine(event, timezone));
   return `Here's what's coming up:\n${lines.join("\n")}`;
 }
 
@@ -288,8 +326,8 @@ export async function calendarAgent(state: AgentState): Promise<Partial<AgentSta
   }
 
   try {
-    const events = await getUpcomingEvents();
-    return { response: buildEventsSummary(events) };
+    const [events, profile] = await Promise.all([getUpcomingEvents(), getProfile()]);
+    return { response: buildEventsSummary(events, profile?.timezone ?? "UTC") };
   } catch (error) {
     logger.error("agents/calendar-agent", "Failed to get calendar events", error);
     return { response: "Couldn't reach your calendar right now — try again in a moment." };

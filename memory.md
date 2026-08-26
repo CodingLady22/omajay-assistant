@@ -1,62 +1,58 @@
-# Memory — Feature 21: Document Management UI
+# Memory — Feature 22: Briefing Agent + Scheduled Send
 
-Last updated: 2026-08-23
+Last updated: 2026-08-26
 
 ## What was built
 
-Feature 21 shipped via the full loop: `/architect` → build → `/review` (found 1 Critical + 1 Important + 2 Minor, all fixed and re-verified live) → ticked in `progress-tracker.md` → `/imprint` on the 3 new components. Real document upload/list/delete UI nested in the Contracts panel, replacing feature 18's script-driven mock ingest as the production path.
+Feature 22 shipped via the full loop: `/architect` → build → live verify (real run + explicit all-empty-context check) → `/review` (found 1 Important + 3 Minor + 2 Informational) → fixed the Important + 3 Minors → re-verified live → ticked in `progress-tracker.md`.
 
 **Server — new:**
-- `server/src/rag/parse.ts` — `extractText(buffer, filename)`: `.pdf` → `pdf-parse` (v2's class-based `new PDFParse({ data }).getText()` API, not the old v1 function signature), else UTF-8 decode. Throws `EmptyExtractionError` when extracted text is under 20 non-whitespace chars (scanned/image-only PDF guard).
-- `server/src/routes/documents.ts` — `GET /`, `POST /upload`, `DELETE /:source`, mounted at `/api/documents`. Upload runs `multer` (memory storage, 10MB limit, `fileFilter` extension whitelist `.pdf`/`.txt`/`.md`) as a promise inside the route's own `try/catch` rather than as middleware — see Problems solved.
+- `server/src/agents/briefing-agent.ts` — `gatherContext`/`describeContext`/`composeBriefing`/`buildFallbackBriefing`/`buildBriefing`. Pure (gather + compose only); not a LangGraph node, per `library-docs.md`'s existing rule that the briefing agent is scheduler-invoked only.
+- `server/src/jobs/morning-briefing.ts` — `deliverBriefing(text)` (the pluggable delivery seam: logs + inserts `{ sent_at, content }` into `briefings`, since WhatsApp/feature 05 is still deferred) + `runMorningBriefing()`.
+- `server/src/jobs/run-briefing-test.ts` — `npm run briefing:test`: real run against the live DB, the all-empty context checked explicitly via both the LLM path and the deterministic fallback, all-day date-key assertions across timezones, cron-derivation assertions (valid/missing/malformed `briefing_time`).
 
 **Server — modified:**
-- `server/src/rag/ingest.ts` — `listDocuments()` added: `$group`-by-`source` aggregation (a "document" is a group of `DocumentChunk` rows, no dedicated per-document record).
-- `server/src/index.ts` — documents router mounted.
-- `server/package.json` — `multer`, `pdf-parse` added.
+- `server/src/jobs/scheduler.ts` — `briefingCronFromTime()` (parses `profile.briefing_time` "HH:MM" → cron, falls back to `"0 8 * * *"` on anything missing/malformed), `loadSchedulingProfile()` (replaces `resolveTimezone()`, fetches the profile once for both jobs instead of twice), both the trends scan and the briefing registered in order.
+- `server/src/agents/calendar-agent.ts` — `/review` fix: `isEventAllDay`/`getEventDateKey`/`todayDateKey` extracted and exported (shared with `briefing-agent.ts`); `formatEventLine`/`buildEventsSummary`/`calendarAgent` now take/pass `profile.timezone` explicitly instead of relying on the server host's default.
+- `server/package.json` — `briefing:test` script added.
 
-**Client — new:**
-- `client/src/components/common/ConfirmDialog.tsx` — reusable confirm modal, first real use of `--color-backdrop`. Generic props (`title`/`message`/`confirmLabel`/`onConfirm`/`onCancel`/`isSubmitting`/`error`) so calendar-add/DM-send-approval can reuse it later.
-- `client/src/components/documents/DocumentRow.tsx`, `UploadDocumentForm.tsx`.
+**Client:** no changes this feature — `build-plan.md`'s feature 22 entry has no UI section, and none was added.
 
-**Client — modified:**
-- `client/src/lib/types.ts` — `DocType`, `DocumentSummary` added.
-- `client/src/lib/api.ts` — `getDocuments`/`uploadDocument`/`deleteDocument` added. `uploadDocument` bypasses the shared `request()` helper (multipart needs `fetch` to set its own `Content-Type` boundary).
-- `client/src/pages/ContractsPage.tsx` — restructured so "Source Documents" renders independently of the contracts list's loading/error/empty state (it previously early-returned before a second section could ever render).
-
-**Docs updated:** `context/architecture.md` (folder tree — new files plus retroactively adding `Chip.tsx`, which was missing since feature 11), `context/code-standards.md` (`multer`/`pdf-parse` added to approved deps), `context/progress-tracker.md` (ticked, decisions + notes recorded), `context/ui-registry.md` (3 new entries).
+**Docs updated:** `context/build-plan.md` (new feature 23 "Mark Script Posted / Contract Sent" inserted right after 22; Settings 23→24, Empty States 24→25; Feature Count table updated to 25 total), `context/progress-tracker.md` (feature 22 ticked, full Decisions/Notes recorded, feature 23 added to the checklist, 3 stale "feature 23/24" cross-references fixed), `context/ui-registry.md` (2 stale cross-references fixed).
 
 ## Decisions made
 
-- **Real PDF support, not text-only** — her actual rate cards/contracts are PDFs; text-only would've been a demo, not a usable tool. `pdf-parse` added as the read-side pair to the existing write-only `pdf-lib`.
-- **Server-side extension whitelist, not just the client's `accept=` hint** — the client attribute is advisory only; enforced via multer's `fileFilter`, which rejects before the file is even buffered.
-- **multer errors handled inside the route's own `try/catch`**, not left as bare middleware — keeps every failure (size limit, extension rejection, real ingest error) on the same `{ success, error }` JSON shape as the rest of the app.
-- **First real use of `--color-backdrop` for a confirm modal** — deleting a document is real, hard-to-reverse data loss (unlike `EventItem`'s Discard, which only drops an unconfirmed proposal), warranting the confirm-modal treatment the token was reserved for back in feature 04.
-- **`listDocuments()` lives in `rag/ingest.ts`**, not a new file — same "reusable, exported" category as `ingestDocument`/`removeDocument`.
+- **"Unfinished" scope capped to the last 14 days**, not all drafts regardless of age. No route anywhere ever flips a script's `status` to `"posted"` or a contract's to `"sent"` — an uncapped query would resurface every draft forever. 14 days (not 7) was chosen deliberately: a short cap drops exactly the highest-value reminders (something forgotten 10+ days ago).
+- **New feature 23 inserted immediately after 22** to close that gap for real (one status-flip route + one UI action each) — the 14-day cap is an explicit, temporary approximation, not a fix. Same insertion/renumbering pattern the project already used for feature 21.
+- **`getProfile()` was confirmed already moved** into `db/profile.ts` back in feature 11 — `build-plan.md`'s feature-22 note (written when feature 09 deferred the move) was stale, not the codebase. Verified before assuming the note was current.
+- **Delivery seam lives at the job layer, not in the agent.** `briefing-agent.ts` stays pure; `jobs/morning-briefing.ts` owns `deliverBriefing`. This is the first job in the codebase to write to Mongo directly rather than through an agent-exported function — disclosed during `/review`, confirmed intentional, kept as-is.
+- **Composition is a real LLM call (temperature 0.3, the shared default)**, not deterministic templating like `calendar-agent.ts`'s `buildEventsSummary` — falls back to a deterministic template (`buildFallbackBriefing`) on any composition failure.
 
 ## Problems solved
 
-- **Multer's own errors bypass a route's `try/catch` when used as middleware.** An 11MB upload against the 10MB limit fell through to Express's default HTML error handler and leaked a raw stack trace with real server filesystem paths — caught in `/review`. Fixed by wrapping `upload.single("file")` in a promise and `await`-ing it inside the handler.
-- **An arbitrary binary decoded as "UTF-8 text" often still clears the empty-extraction guard's 20-char floor** — a `.exe` of random bytes was accepted and actually ingested as a real embedded chunk with `200 success` before the extension whitelist was added. Verified live, both before (bug present) and after (fixed, 422) the fix.
-- **`pdf-parse` v2's API is class-based** (`new PDFParse({ data: buffer }).getText()`), not the `pdf(buffer).then(...)` function signature most training data / v1 docs assume — confirmed against the actually-installed package's type declarations before writing `rag/parse.ts`.
+- **Important timezone bug (found in `/review`), fixed together with its twin in feature 13's `calendar-agent.ts` per explicit instruction not to fix one and leave the other.** All-day Google Calendar events are normalized to a timezone-naive `"T00:00:00"`/`"T23:59:00"` string with no real zone attached. Constructing a `Date` from that naive string let the server host's own local timezone leak into date comparisons/labels that should only ever depend on `profile.timezone` — on a UTC host with Sofia in Europe/Rome, an all-day event could resolve to the wrong day. Fixed by reading an all-day event's date directly from the string (never through `new Date()` + ambient-zone interpretation) in the new shared `isEventAllDay`/`getEventDateKey`/`todayDateKey` helpers.
+- **Verified genuinely host-independent**, not just re-tested under the same default twice: ran the all-day date-key check under `process.env.TZ` = `UTC`, `Pacific/Kiritimati` (UTC+14), and `Etc/GMT+12` (UTC-12) — a 26-hour spread — all three produced the identical, correct `"2026-08-25"`.
+- **Dev-environment gotcha discovered along the way: Git Bash/MSYS on this Windows machine silently drops any `TZ` env value containing a `/`** (its path-conversion heuristic mistakes an IANA zone name like `Pacific/Kiritimati` for a filesystem path). `TZ=UTC` works fine via Bash (no slash); a real non-UTC zone needs PowerShell's `$env:TZ = "..."` instead. Cost real verification time — two `TZ=Pacific/Kiritimati npm run briefing:test` Bash runs silently no-op'd on this before being caught (the log line `process TZ=(host default)` was the tell).
+- **3 Minor `/review` findings also fixed:** the 3-way duplicated `isAllDay` (now one shared implementation in `calendar-agent.ts`), a missing why-comment on the `en-CA` locale trick, and an untested cron-fallback path (now exercised directly in `briefing:test` via exported `briefingCronFromTime`/`DEFAULT_BRIEFING_CRON`).
+- **2 Informational findings** (the job-level direct `briefings` write, the small `registerJobs` refactor) were disclosed, confirmed as intentional by the developer, and left as-is — not defects.
 
 ## Current state
 
-- **Feature 21 complete, reviewed (all 4 findings fixed and re-verified live), ticked in `progress-tracker.md`, `/imprint` run.** `tsc -b --noEmit` clean on both `server/` and `client/`.
-- Verified live end-to-end: real PDF + `.md` upload → ingested and listed; scanned/blank PDF → correctly 422s, not ingested; a real contract draft grounded verbatim against an uploaded PDF's figures; deleting that PDF via the confirm modal and re-drafting confirmed the deleted figures no longer surfaced and `sources` dropped the filename — **grounding verified at the retrieval level, not just the list UI**, per explicit instruction. Oversized upload and disallowed-extension upload both re-verified to return clean JSON errors after the review fixes.
-- Repo state: branch `documentManagementUI`. The user committed the initial build themselves mid-session (commit `cae32db feat: build document management UI`) — my subsequent 4 review-fix changes (multer error handling + extension whitelist in `routes/documents.ts`, comment + import fix in `UploadDocumentForm.tsx`) plus all doc updates are **uncommitted**, sitting on top of that commit. I have not committed anything this session, per standing instruction to only commit when asked.
-- No dev servers left running; all test artifacts (test contracts, test-uploaded documents) cleaned from the real database/GridFS afterward.
+- **Feature 22 complete, reviewed (all actionable findings fixed and re-verified live), ticked in `progress-tracker.md`.** `tsc -b --noEmit` clean on `server/` throughout.
+- Verified live end-to-end against the real stack: a real briefing run gathered actual leftover script/contract drafts from prior features' testing and composed a natural reminder, then delivered it (logged + a real row inserted into `briefings`); the all-empty context read naturally via both the LLM path and the deterministic fallback; a real `npm run dev` boot confirmed both cron jobs register correctly and in the required order (6am trends scan before 8am briefing, both reading the real seeded profile's `Europe/Rome` timezone).
+- Repo state: the developer said they committed the initial build themselves mid-session; my subsequent `/review`-fix changes (the timezone fix across `briefing-agent.ts`/`calendar-agent.ts`/`run-briefing-test.ts`/`scheduler.ts`) plus all doc updates were made after that and have **not** been committed by me — per standing instruction to only commit when asked.
+- No dev servers left running; the `tmp-tz-check.ts` scratch file used for the PowerShell timezone verification was deleted after use.
 
 ## Next session starts with
 
-**Feature 22 — Briefing Agent + Scheduled Send**, per `build-plan.md` Phase 8: gathers today's events, unfinished script drafts, unsent contracts, unreplied brand DMs; composes a short WhatsApp-style briefing. Two things flagged in the plan to actually do this time: (1) move `getProfile()` out of `agents/trends-agent.ts` into a shared accessor now that this becomes a third consumer (deferred since feature 09's `/review`). (2) Since feature 05 (WhatsApp) is still deferred, delivery must go behind a pluggable seam (e.g. `deliverBriefing(text)`) rather than calling `sendWhatsApp` directly — sending to the dashboard/console for now, swapped to real WhatsApp once feature 05 lands. Run `/architect` first per the project's loop.
+**Feature 23 — Mark Script Posted / Contract Sent** (new, inserted this session), per `build-plan.md`: `POST /api/scripts/:id/status` (flips `"draft"` → `"posted"`) and `POST /api/contracts/:id/status` (flips `"draft"` → `"sent"`), plus a small `<Chip>`-style action on `ScriptCard`/`ContractCard` to trigger each. Marking an item doesn't remove it from its library view — only from the briefing's 14-day-capped "unfinished" query. Run `/architect` first per the project's loop.
 
 ## Open questions
 
-- Whether the uncommitted review-fix changes on `documentManagementUI` should be committed (and whether as part of the same commit or a separate one) — left to the developer, not committed by me.
 - Whether/how to detect a silently-dropped Atlas Search index proactively — carried over from feature 18/20, still unaddressed.
 - `@langchain/google` still pre-1.0 (0.2.x) — carried over, no action needed yet.
 - Whether the dev/test Google Calendar gets swapped for Sofia's real shared calendar before production — carried over, unaddressed.
-- Whether a self-explaining-disabled-control pattern (tooltip on disabled buttons) should become a deliberate app-wide decision — carried over from feature 19, still undecided.
+- Whether a self-explaining-disabled-control pattern should become a deliberate app-wide decision — carried over from feature 19, still undecided.
 - Whether `ContractCard`'s duplicated download-link className should be extracted into a shared link-chip component — carried over from feature 20, still open.
-- The `<select>` in `UploadDocumentForm` deviates slightly from `ui-tokens.md`'s Input spec (padding, no focus ring) — flagged in `ui-registry.md` for whenever a real `<select>` pattern gets formalized elsewhere; not corrected in isolation this feature.
+- The `<select>` in `UploadDocumentForm` deviates slightly from `ui-tokens.md`'s Input spec — carried over from feature 21, not corrected in isolation.
+- New: the Git Bash/MSYS "TZ with a slash gets silently dropped" quirk on this dev machine isn't a code issue, just something to remember — use PowerShell's `$env:TZ` for any future non-UTC timezone testing here.
