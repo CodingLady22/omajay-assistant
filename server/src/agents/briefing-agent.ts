@@ -1,4 +1,4 @@
-import { getUpcomingEvents } from "@/agents/calendar-agent";
+import { getEventDateKey, getUpcomingEvents, isEventAllDay, todayDateKey } from "@/agents/calendar-agent";
 import { collections } from "@/db/collections";
 import { llm } from "@/lib/llm";
 import { logger } from "@/lib/logger";
@@ -16,6 +16,7 @@ const RECENT_WINDOW_DAYS = 14;
 
 type BriefingContext = {
   today: string;
+  timezone: string;
   events: CalendarEventView[];
   draftScripts: ScriptDoc[];
   draftContracts: ContractDoc[];
@@ -26,12 +27,13 @@ function daysAgo(days: number): Date {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 }
 
-function toDateKey(date: Date, timezone: string): string {
-  return date.toLocaleDateString("en-CA", { timeZone: timezone });
-}
-
+// Delegates to calendar-agent.ts's getEventDateKey/todayDateKey rather than
+// comparing `new Date(event.start)` directly — an all-day event's start is a
+// timezone-naive string, and comparing it "today" without going through the
+// all-day-aware date-key logic silently reintroduces the host-timezone bug
+// those helpers exist to avoid (see their comments in calendar-agent.ts).
 function isEventToday(event: CalendarEventView, timezone: string): boolean {
-  return toDateKey(new Date(event.start), timezone) === toDateKey(new Date(), timezone);
+  return getEventDateKey(event, timezone) === todayDateKey(timezone);
 }
 
 function formatToday(timezone: string): string {
@@ -44,17 +46,9 @@ function formatToday(timezone: string): string {
   });
 }
 
-// Same 00:00–23:59 heuristic EventItem.tsx/calendar-agent.ts already use for
-// "all day" detection.
-function isAllDay(event: CalendarEventView): boolean {
-  const start = new Date(event.start);
-  const end = new Date(event.end);
-  return start.getHours() === 0 && start.getMinutes() === 0 && end.getHours() === 23 && end.getMinutes() === 59;
-}
-
-function formatEventTime(event: CalendarEventView): string {
-  if (isAllDay(event)) return "all day";
-  return new Date(event.start).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+function formatEventTime(event: CalendarEventView, timezone: string): string {
+  if (isEventAllDay(event)) return "all day";
+  return new Date(event.start).toLocaleTimeString("en-US", { timeZone: timezone, hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
 function daysAgoLabel(date: Date): string {
@@ -123,7 +117,7 @@ async function gatherContext(profile: Profile | null): Promise<BriefingContext> 
     gatherRecentDraftContracts(),
     gatherPendingDms(),
   ]);
-  return { today: formatToday(timezone), events, draftScripts, draftContracts, pendingDms };
+  return { today: formatToday(timezone), timezone, events, draftScripts, draftContracts, pendingDms };
 }
 
 // --- Composition ---
@@ -133,7 +127,7 @@ function describeContext(context: BriefingContext): string {
     context.events.length === 0
       ? "Nothing on the calendar today."
       : context.events
-          .map((event) => `- ${event.title}${event.location ? ` (${event.location})` : ""} at ${formatEventTime(event)}`)
+          .map((event) => `- ${event.title}${event.location ? ` (${event.location})` : ""} at ${formatEventTime(event, context.timezone)}`)
           .join("\n");
 
   const scriptsText =

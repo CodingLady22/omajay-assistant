@@ -325,9 +325,23 @@ Set up the project shell.
 
 ---
 
+### 23 Mark Script Posted / Contract Sent
+
+**Inserted 2026-08-25, developer decision made during feature 22's `/review`.** No route anywhere flips a script's `status` from `"draft"` to `"posted"`, or a contract's from `"draft"` to `"sent"` — both fields exist on their schemas (`architecture.md`) but nothing ever transitions them. Feature 22's briefing reminds her about "unfinished" work by querying `status: "draft"`; without this feature every draft ever created would resurface every single morning forever. Feature 22 worked around this with a 14-day recency cap (see its Decisions below) — a deliberate, temporary approximation, not a fix. This feature closes the actual gap, kept deliberately small: the field already exists on both schemas, this is one route + one UI action each.
+
+**Logic + UI:**
+
+- `POST /api/scripts/:id/status` — flips a script's `status` to `"posted"`. Zod-validated; `"posted"` is the only valid target (no route needs to reverse it back to `"draft"`).
+- `POST /api/contracts/:id/status` — flips a contract's `status` to `"sent"`, same shape.
+- `ScriptCard`/`ContractCard` each get a small action (matching the existing `<Chip>` pattern) — "Mark posted" / "Mark sent" — that calls the route and refetches the list. Marking a script/contract does not remove it from its library view — it stays visible with an updated status badge; it only stops counting as "unfinished" for the briefing's 14-day-capped query.
+
+**Verify:** mark a real script posted and a real contract sent through the dashboard; confirm the status badge updates in place (item stays in the library) and a fresh `npm run briefing:test` run no longer lists either as unfinished.
+
+---
+
 ## Phase 9 — Settings + Polish
 
-### 23 Settings Panel
+### 24 Settings Panel
 
 **UI + Logic:**
 
@@ -338,7 +352,7 @@ Set up the project shell.
 
 ---
 
-### 24 Empty States + Error Handling Pass
+### 25 Empty States + Error Handling Pass
 
 **Logic:**
 
@@ -361,6 +375,6 @@ Set up the project shell.
 | Phase 5 — Calendar          | 3        |
 | Phase 6 — DMs               | 3        |
 | Phase 7 — Contracts (RAG)   | 4        |
-| Phase 8 — Morning Briefing  | 1        |
+| Phase 8 — Morning Briefing  | 2        |
 | Phase 9 — Settings + Polish | 2        |
-| **Total**                   | **24**   |
+| **Total**                   | **25**   |

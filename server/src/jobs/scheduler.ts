@@ -12,14 +12,17 @@ import type { Profile } from "@/types";
 // this the same way `profile.briefing_time` already drives the briefing.
 const SCAN_CRON = "0 6 * * *";
 const DEFAULT_TIMEZONE = "UTC";
-const DEFAULT_BRIEFING_CRON = "0 8 * * *";
+// Exported so the verify script (run-briefing-test.ts) can exercise the
+// malformed/missing-input fallback branch directly — a real server boot only
+// ever exercises the current, valid profile.briefing_time value.
+export const DEFAULT_BRIEFING_CRON = "0 8 * * *";
 const BRIEFING_TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 // profile.briefing_time is a plain "HH:MM" string (architecture.md), not a
 // cron expression — convert it, falling back to the default (and matching
 // the SCAN_CRON ordering above) on anything missing or malformed rather than
 // letting a bad value crash job registration.
-function briefingCronFromTime(time: string | undefined): string {
+export function briefingCronFromTime(time: string | undefined): string {
   if (!time) return DEFAULT_BRIEFING_CRON;
   const match = time.match(BRIEFING_TIME_PATTERN);
   if (!match) {
