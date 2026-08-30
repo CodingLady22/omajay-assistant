@@ -1,4 +1,13 @@
-import type { CalendarEvent, Contract, DocType, DocumentSummary, Script, Trend } from "@/lib/types";
+import type {
+  CalendarEvent,
+  Contract,
+  ContractStatus,
+  DocType,
+  DocumentSummary,
+  Script,
+  ScriptStatus,
+  Trend,
+} from "@/lib/types";
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -34,6 +43,13 @@ export async function getScripts(): Promise<ApiResponse<Script[]>> {
   return request("/api/scripts");
 }
 
+export async function setScriptStatus(id: string, status: ScriptStatus): Promise<ApiResponse<Script>> {
+  return request(`/api/scripts/${id}/status`, {
+    method: "POST",
+    body: JSON.stringify({ status }),
+  });
+}
+
 export async function getCalendarEvents(): Promise<ApiResponse<CalendarEvent[]>> {
   return request("/api/calendar");
 }
@@ -54,6 +70,13 @@ export async function discardCalendarEvent(eventId: string): Promise<ApiResponse
 
 export async function getContracts(): Promise<ApiResponse<Contract[]>> {
   return request("/api/contracts");
+}
+
+export async function setContractStatus(id: string, status: ContractStatus): Promise<ApiResponse<Contract>> {
+  return request(`/api/contracts/${id}/status`, {
+    method: "POST",
+    body: JSON.stringify({ status }),
+  });
 }
 
 export async function getDocuments(): Promise<ApiResponse<DocumentSummary[]>> {

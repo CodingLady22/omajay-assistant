@@ -87,7 +87,7 @@ export function EventItem({ event, onChange }: Props) {
             </div>
             {/* No dedicated error/danger token exists yet (ui-tokens.md's
                 palette is closed) — matches the plain-secondary-text error
-                convention every other panel already uses ahead of feature 23's
+                convention every other panel already uses ahead of feature 25's
                 unified error-styling pass. */}
             {error && <div className="text-[11px] text-text-secondary">{error}</div>}
           </div>

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { z } from "zod";
-import { draftContract, getContractPdf, getStoredContracts } from "@/agents/contracts-agent";
+import { draftContract, getContractPdf, getStoredContracts, setContractStatus } from "@/agents/contracts-agent";
 import { logger } from "@/lib/logger";
 
 const router = Router();
@@ -12,6 +12,7 @@ const draftSchema = z.object({
 });
 
 const idParamSchema = z.object({ id: z.string().min(1) });
+const statusBodySchema = z.object({ status: z.enum(["draft", "sent"]) });
 
 router.post("/draft", async (req: Request, res: Response) => {
   try {
@@ -40,6 +41,21 @@ router.get("/", async (_req: Request, res: Response) => {
   } catch (error) {
     logger.error("routes/contracts", "Failed to fetch contracts", error);
     return res.status(500).json({ success: false, error: "Failed to fetch contracts" });
+  }
+});
+
+router.post("/:id/status", async (req: Request, res: Response) => {
+  try {
+    const { id } = idParamSchema.parse(req.params);
+    const { status } = statusBodySchema.parse(req.body);
+    const contract = await setContractStatus(id, status);
+    if (!contract) {
+      return res.status(404).json({ success: false, error: "Contract not found" });
+    }
+    return res.json({ success: true, data: contract });
+  } catch (error) {
+    logger.error("routes/contracts", "Failed to update contract status", error);
+    return res.status(500).json({ success: false, error: "Failed to update contract status" });
   }
 });
 

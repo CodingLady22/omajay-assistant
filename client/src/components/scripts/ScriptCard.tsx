@@ -1,16 +1,26 @@
+import { useState } from "react";
 import type { ReactElement } from "react";
 import { useChatPrompt } from "@/lib/useChatPrompt";
-import type { Script } from "@/lib/types";
+import { setScriptStatus } from "@/lib/api";
+import type { Script, ScriptStatus } from "@/lib/types";
 import { Chip } from "@/components/common/Chip";
 
 type Props = {
   script: Script;
+  onChange?: () => void;
 };
 
 const KIND_LABEL: Record<Script["kind"], string> = {
   reel: "Reel",
   caption: "IG Post",
   carousel: "Carousel",
+};
+
+// Same neutral bg-info-bg/text-info treatment as the kind badge next to it —
+// the DM pink/green pair stays reserved for DM classification only.
+const STATUS_LABEL: Record<ScriptStatus, string> = {
+  draft: "Draft",
+  posted: "Posted",
 };
 
 function actionFor(script: Script): { label: string; prompt: string } {
@@ -66,22 +76,58 @@ function renderBody(script: Script): ReactElement | null {
   }
 }
 
-export function ScriptCard({ script }: Props) {
+export function ScriptCard({ script, onChange }: Props) {
   const goToChat = useChatPrompt();
   const action = actionFor(script);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const nextStatus: ScriptStatus = script.status === "draft" ? "posted" : "draft";
+  const toggleLabel = script.status === "draft" ? "Mark posted" : "Mark as draft";
+
+  // Reversible on purpose (see content-agent.ts's setScriptStatus) — a
+  // mis-click can always be undone from the card itself.
+  async function handleToggleStatus() {
+    if (!script._id) return;
+    setIsSubmitting(true);
+    setError(null);
+    const result = await setScriptStatus(script._id, nextStatus);
+    // Always reset, success or failure — unlike EventItem's Confirm/Discard
+    // (which vanish once isProposed flips false), this card keeps the same
+    // key/instance across a refetch, so a success-only reset would leave the
+    // button permanently disabled after the first successful toggle.
+    setIsSubmitting(false);
+    if (result.success) {
+      onChange?.();
+    } else {
+      setError(result.error);
+    }
+  }
 
   return (
     <div className="rounded-lg border-[0.5px] border-border bg-surface px-4 py-3.5">
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="text-[13px] font-medium text-text-primary">{script.title}</div>
-        <span className="shrink-0 rounded-full bg-info-bg px-1.75 py-0.5 text-[10px] font-normal text-info">
-          {KIND_LABEL[script.kind]}
-        </span>
+        <div className="flex shrink-0 items-center gap-1">
+          <span className="rounded-full bg-info-bg px-1.75 py-0.5 text-[10px] font-normal text-info">
+            {STATUS_LABEL[script.status]}
+          </span>
+          <span className="rounded-full bg-info-bg px-1.75 py-0.5 text-[10px] font-normal text-info">
+            {KIND_LABEL[script.kind]}
+          </span>
+        </div>
       </div>
       {renderBody(script)}
-      <Chip className="mt-2.5" onClick={() => goToChat(action.prompt)}>
-        {action.label}
-      </Chip>
+      <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+        <Chip onClick={() => goToChat(action.prompt)}>{action.label}</Chip>
+        <Chip onClick={handleToggleStatus} disabled={isSubmitting}>
+          {toggleLabel}
+        </Chip>
+      </div>
+      {/* No dedicated error/danger token exists yet — matches the plain-secondary-text
+          error convention EventItem already established ahead of feature 25's unified
+          error-styling pass. */}
+      {error && <div className="mt-1.5 text-[11px] text-text-secondary">{error}</div>}
     </div>
   );
 }

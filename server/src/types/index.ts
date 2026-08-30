@@ -192,6 +192,8 @@ export type ContractTerms = {
   revisions: string | null;
 };
 
+export type ContractStatus = "draft" | "sent";
+
 export type ContractDoc = {
   _id?: ObjectId;
   brand: string;
@@ -199,7 +201,7 @@ export type ContractDoc = {
   terms: ContractTerms;
   pdf_path: string;
   sources: string[];
-  status: "draft" | "sent";
+  status: ContractStatus;
   created_at: Date;
 };
 

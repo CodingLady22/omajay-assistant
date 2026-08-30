@@ -8,7 +8,7 @@ import { extractJson } from "@/lib/utils";
 import { retrieveContext } from "@/rag/retrieve";
 import { renderContractPdf } from "@/services/pdf";
 import type { AgentState } from "@/agents/state";
-import type { ContractDoc, ContractTerms } from "@/types";
+import type { ContractDoc, ContractStatus, ContractTerms } from "@/types";
 
 const RETRIEVAL_K = 6;
 
@@ -137,6 +137,17 @@ export async function getContractPdf(contractId: string): Promise<{ buffer: Buff
   if (!contract) return null;
   const buffer = await downloadPdf(contract.pdf_path);
   return { buffer, filename: `${contract.brand}-contract.pdf` };
+}
+
+// Reversible on purpose (draft <-> sent) — same feature-23 /architect
+// decision as content-agent.ts's setScriptStatus, diverging from
+// build-plan.md's original one-way spec for the same undo-without-Mongo-
+// surgery reason.
+export async function setContractStatus(id: string, status: ContractStatus): Promise<ContractDoc | null> {
+  const updated = await collections
+    .contracts()
+    .findOneAndUpdate({ _id: new ObjectId(id) }, { $set: { status } }, { returnDocument: "after" });
+  return updated ?? null;
 }
 
 // --- Chat node ---
