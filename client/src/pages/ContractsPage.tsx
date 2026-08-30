@@ -18,8 +18,11 @@ export function ContractsPage() {
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [documentsState, setDocumentsState] = useState<LoadState>("loading");
 
+  // No synchronous setDocumentsState("loading") here — the initial
+  // useState("loading") already covers first render, and calling it
+  // synchronously from the mount effect below tripped
+  // react-hooks/set-state-in-effect (same fix as SettingsPage.tsx).
   const refetchDocuments = useCallback(() => {
-    setDocumentsState("loading");
     getDocuments().then((result) => {
       if (result.success) {
         setDocuments(result.data);
