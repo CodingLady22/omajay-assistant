@@ -10,6 +10,7 @@ Update this file after every completed feature. Any AI agent reading this should
 **Last completed:** 23 Mark Script Posted / Contract Sent
 **Next:** 24 Settings Panel
 **Deferred:** 05 WhatsApp Webhook + Send — blocked on a WhatsApp Cloud API token from Meta. Phase 6 (15-17 DMs) — blocked on Instagram credentials (`INSTAGRAM_TOKEN`/`INSTAGRAM_ACCOUNT_ID`), not yet available; Instagram's real implementation within 07 (`services/instagram.ts`) remains a `[]` stub for the same reason. See Decisions below for why the plan skips from 14 to 18.
+**Plan updated (2026-08-30):** new feature 26 "Single-user Auth" (Phase 10 — Auth + Deploy Readiness) added to `build-plan.md` — the dashboard/API auth gap `architecture.md` had always anticipated but no feature ever built. Placed last, before real accounts/documents connect. Not yet built — see Decisions below.
 
 ---
 
@@ -66,6 +67,10 @@ Update this file after every completed feature. Any AI agent reading this should
 
 - [ ] 24 Settings Panel
 - [ ] 25 Empty States + Error Handling Pass
+
+### Phase 10 — Auth + Deploy Readiness
+
+- [ ] 26 Single-user Auth — **added 2026-08-30, not yet built** (see Decisions)
 
 ---
 
@@ -151,6 +156,7 @@ _Add decisions here as they are made during implementation._
 - **Feature 23 — no new orchestrator intent / chat path.** Dashboard-only, matching the original `build-plan.md` scope ("one route + one UI action each"); the fixed intent set in `architecture.md` is untouched.
 - **Feature 23 — real `/review`-caught bug, found only by live Playwright testing, not by `tsc` or a static read:** `handleToggleStatus` in both `ScriptCard.tsx` and `ContractCard.tsx` originally reset `isSubmitting` back to `false` only on the failure branch. Unlike `EventItem`'s Confirm/Discard (whose buttons vanish entirely once `isProposed` flips false, since the whole block is conditionally rendered), the toggle button here is *always* rendered and the card keeps the same `key`/component instance across a refetch — so after one successful toggle, the button stayed permanently disabled (confirmed live: a second click hung 30s waiting for `disabled` to clear, which it never did). Fixed by unconditionally calling `setIsSubmitting(false)` right after the request resolves, before branching on success/failure. Re-verified live: repeated toggles (draft→posted→draft, draft→sent→draft) both worked cleanly with no disabled-forever state.
 - **Feature 23 — follow-up recorded for later, not built now: feature 22's briefing can eventually filter on real `status` instead of the 14-day recency cap**, now that real draft↔posted/draft↔sent transitions exist. The 14-day cap was always an explicit, temporary approximation (see feature 22's decisions above) put in place specifically because no such route existed yet — it still does no harm today (a script/contract that's been marked posted/sent no longer matches `status: "draft"` regardless of the cap), but the cap itself is now redundant safety rather than the only mechanism preventing drafts from resurfacing forever. Revisiting `gatherRecentDraftScripts`/`gatherRecentDraftContracts` in `briefing-agent.ts` to drop the `created_at` window entirely is a candidate for a future polish pass — not scoped to any currently-planned feature.
+- **2026-08-30 — New feature 26 "Single-user Auth" (Phase 10 — Auth + Deploy Readiness) added to `build-plan.md`, not yet built.** Gap surfaced by the developer: `architecture.md`'s Authentication section already documented "the web dashboard is protected by a single login" as the intended design, but no feature in the plan ever built it — every `/api/*` route (DMs, contracts, rates, calendar) has been unauthenticated for the whole build. Approach discussed and approved before any code was written: app-level password + signed httpOnly session cookie (`crypto.timingSafeEqual` against a new `DASHBOARD_PASSWORD` env var; HMAC-signed cookie via a new `SESSION_SECRET` env var, Node's built-in `crypto`, no new dependency, no session store) over edge/hosting-level protection (untestable until a host is chosen, needs a path-based carve-out for the WhatsApp webhook) and over HTTP Basic Auth (worse fit for a dashboard she uses daily — no styled login, awkward logout). `requireAuth` middleware covers every `/api/*` route except `/api/whatsapp` (keeps its own Meta signature check) and `/api/auth/*`. Also catches `GET /api/contracts/:id/pdf` under the same gate — the one other private-data-by-URL leak found during this discussion. Placed deliberately last (Phase 10, after Settings/Empty States) — a cross-cutting gate, not a panel, and the last thing before real accounts/documents connect, per `AGENTS.md`'s "mock data until production" rule. **Not built yet** — `/architect` and implementation are deliberately deferred until the plan actually reaches this feature, per explicit developer instruction.
 
 ---
 
