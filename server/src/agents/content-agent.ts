@@ -1,3 +1,4 @@
+import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { DEFAULT_TOPIC } from "@/agents/trends-agent";
 import { collections } from "@/db/collections";
@@ -6,7 +7,7 @@ import { llm } from "@/lib/llm";
 import { logger } from "@/lib/logger";
 import { extractJson } from "@/lib/utils";
 import type { AgentState } from "@/agents/state";
-import type { CaptionScriptDoc, Profile, ReelScriptDoc, ScriptDoc } from "@/types";
+import type { CaptionScriptDoc, Profile, ReelScriptDoc, ScriptDoc, ScriptStatus } from "@/types";
 
 const SCRIPT_TEMPERATURE = 0.7;
 
@@ -103,6 +104,16 @@ function buildConfirmation(kind: ScriptKind, title: string): string {
 // scripts through one place instead of scattering raw collections.scripts() reads.
 export async function getStoredScripts(): Promise<ScriptDoc[]> {
   return collections.scripts().find({}).sort({ created_at: -1 }).toArray();
+}
+
+// Reversible on purpose (draft <-> posted) — an explicit developer decision
+// during feature 23's /architect, diverging from build-plan.md's original
+// one-way spec: a mis-click otherwise needs manual Mongo surgery to undo.
+export async function setScriptStatus(id: string, status: ScriptStatus): Promise<ScriptDoc | null> {
+  const updated = await collections
+    .scripts()
+    .findOneAndUpdate({ _id: new ObjectId(id) }, { $set: { status } }, { returnDocument: "after" });
+  return updated ?? null;
 }
 
 const SMALLTALK_SYSTEM_PROMPT = `You are Sofia's warm, concise AI assistant for her makeup/beauty content business.

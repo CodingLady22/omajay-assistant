@@ -23,8 +23,6 @@ type ScriptCommon = {
   title: string;
   trend_id?: string;
   hashtags: string[];
-  // Carried for schema fidelity — ScriptCard doesn't render a status badge yet,
-  // there's no design mock for one.
   status: ScriptStatus;
   created_at: string;
 };

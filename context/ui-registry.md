@@ -179,19 +179,19 @@ This is the canonical "clickable card" pattern — a whole-card `<button>` (not 
 ### ScriptCard
 
 File: client/src/components/scripts/ScriptCard.tsx
-Last updated: 2026-08-12
+Last updated: 2026-08-30
 
 | Property         | Class                                                              |
 | ---------------- | ------------------------------------------------------------------- |
 | Background       | `bg-surface`                                                        |
 | Border            | `border-[0.5px] border-border` (static — no hover state)            |
-| Border radius     | `rounded-lg` (card) · `rounded-full` (kind badge, action chip)      |
+| Border radius     | `rounded-lg` (card) · `rounded-full` (kind badge, status badge, action/toggle chips) |
 | Text — primary    | `text-text-primary` (title, 13px medium · inline field labels "Hook:"/"Body:"/"CTA:", medium weight) |
-| Text — secondary  | `text-text-secondary` (12px body copy, `leading-[1.65]`)            |
-| Spacing           | `px-4 py-3.5` card padding · `mb-2` header-to-body gap · `mt-1` between body lines · `mt-2.5` body-to-chip gap |
-| Hover state       | none on the card itself; action chip uses the standard chip hover (see QuickChips) |
+| Text — secondary  | `text-text-secondary` (12px body copy, `leading-[1.65]`; also the toggle-failure error line, see below) |
+| Spacing           | `px-4 py-3.5` card padding · `mb-2` header-to-body gap · `mt-1` between body lines · `mt-2.5` body-to-chip-row gap · `gap-1.5` between chips in the row · `gap-1` between the two header badges · `mt-1.5` chip-row-to-error gap |
+| Hover state       | none on the card itself; chips use the standard chip hover (see QuickChips) |
 | Shadow            | none                                                                 |
-| Accent usage      | kind badge: `bg-info-bg text-info` (`px-1.75 py-0.5 text-[10px] font-normal rounded-full`) |
+| Accent usage      | kind badge + status badge: both `bg-info-bg text-info` (`px-1.75 py-0.5 text-[10px] font-normal rounded-full`) |
 
 **Pattern notes:**
 This is a deliberate divergence from `TrendCard`'s "whole card is a clickable button" pattern — the mock renders `script-card` as a static, non-interactive container with only its inner chip(s) as click targets, and there's no single obvious "go to chat" action for a whole script card the way there is for a trend. Do not wrap future ScriptCard-like containers in a button unless the design shows the whole card as one action.
@@ -201,6 +201,8 @@ The kind badge deliberately does **not** reuse the DM-classification pink/`succe
 The action chip button reuses `QuickChips`' exact canonical chip classes unchanged (`rounded-full border border-border px-[11px] py-1 text-[11px] text-text-secondary hover:border-pink-mid hover:bg-pink-light hover:text-pink`) plus a `mt-2.5` top margin for placement under the card body — no new chip variant was introduced.
 
 **2026-08-13 — extracted into `<Chip>`, real data wired in (feature 11).** The action chip now renders via `client/src/components/common/Chip.tsx` instead of a copy-pasted `<button>` (see `Chip` entry below) — same classes, same placement. The kind badge label switched from a per-mock-item `badgeLabel` string to a fixed `KIND_LABEL` map keyed on `script.kind` (`reel: "Reel"`, `caption: "IG Post"`, `carousel: "Carousel"`) since real generated scripts don't carry a bespoke label the way curated mock entries did. Caption rendering changed from a single paragraph to a numbered `Option 1/2/3:` list, because the server now generates real caption **variants** (plural) rather than one mock `text` string — reuses the same `text-xs leading-[1.65] text-text-secondary` styling per line. Navigation now goes through `useChatPrompt()` instead of an inline `navigate("/", { state: { prompt } })` call.
+
+**2026-08-30 — first-ever status badge + reversible toggle chip added (feature 23).** `script.status` was carried in the type since feature 11 but never rendered — a second badge (`Draft`/`Posted`) now sits next to the kind badge in the header, wrapped in a `flex items-center gap-1` container, using the exact same `bg-info-bg text-info` pill as the kind badge (deliberately *not* the DM pink/green pair, matching this card's existing precedent). The chip row below the body gained a second `<Chip>` — "Mark posted"/"Mark as draft" (label flips with current status) — reversible, not one-way; matches `contracts-agent.ts`'s twin decision, see `progress-tracker.md`'s feature 23 entry for the full reasoning. The row wrapper changed from a single bare `<Chip className="mt-2.5">` to a `<div className="mt-2.5 flex flex-wrap items-center gap-1.5">` holding both chips — any future card needing more than one action chip should use this exact wrapper rather than stacking chips with individual margins. Failure renders a `mt-1.5 text-[11px] text-text-secondary` line below the chip row, matching `EventItem`'s existing plain-secondary-text error convention (no dedicated error/danger token exists yet — deferred to feature 25). **Bug caught only by live double-click testing:** the toggle's `isSubmitting` reset must happen unconditionally (both success and failure), not only on failure — this card keeps the same component instance across a refetch (same `key`), unlike `EventItem`'s Confirm/Discard whose parent block unmounts once `isProposed` flips false, so a success-only reset left the button disabled forever after one click.
 
 ---
 
@@ -281,16 +283,16 @@ The four dot colors are drawn from the existing closed palette (`pink`, `coral`,
 ### ContractCard
 
 File: client/src/components/contracts/ContractCard.tsx
-Last updated: 2026-08-23
+Last updated: 2026-08-30
 
 | Property         | Class                                                              |
 | ---------------- | ------------------------------------------------------------------- |
 | Background       | `bg-surface`                                                        |
 | Border            | `border-[0.5px] border-border` (static — no hover state)            |
-| Border radius     | `rounded-lg` (card) · `rounded-full` (status badge, action chips)   |
+| Border radius     | `rounded-lg` (card) · `rounded-full` (status badge, action/toggle chips) |
 | Text — primary    | `text-text-primary` (brand name, 13px medium)                       |
-| Text — secondary  | `text-text-secondary` (12px deal-summary body, `leading-[1.65]`)    |
-| Spacing           | `px-4 py-3.5` card padding · `mb-2` header-to-body gap · `mt-2.5` body-to-actions gap · `gap-1.5` between the two action chips |
+| Text — secondary  | `text-text-secondary` (12px deal-summary body, `leading-[1.65]`; also the toggle-failure error line, see below) |
+| Spacing           | `px-4 py-3.5` card padding · `mb-2` header-to-body gap · `mt-2.5` body-to-actions gap · `gap-1.5` between the action/toggle chips · `mt-1.5` chip-row-to-error gap |
 | Hover state       | none on the card itself; chips use the standard `Chip` hover, except the disabled "Download PDF" chip which suppresses hover entirely |
 | Shadow            | none                                                                 |
 | Accent usage      | status badge: `bg-info-bg text-info` (`px-1.75 py-0.5 text-[10px] font-normal rounded-full`), same label for both `draft`/`sent` values — colour does not vary by status |
@@ -303,6 +305,8 @@ The two action chips diverge from each other on purpose: **"Edit terms ↗"** is
 **2026-08-22 — `/review` caught two precedent deviations, both fixed.** (1) `ContractsPage.tsx` originally had an empty-state branch guarding `MOCK_CONTRACTS.length === 0` — unreachable dead code against a fixed 3-item array, and a direct contradiction of the project's own settled precedent: `TrendsPage.tsx` shipped with no empty check in its mock-only feature (06), and feature 10's `/code-review` explicitly ruled that an empty-state branch belongs with real fetching, not mock-only UI. Removed; will be added back in feature 20 alongside the real fetch, same as trends/scripts. (2) The disabled "Download PDF" chip originally carried a `title` tooltip explaining why it's disabled — no other disabled control in the app (`CalendarGrid`'s chevrons) does this. Dropped to match `CalendarGrid` exactly; a self-explaining-disabled-control pattern, if wanted, is a deliberate app-wide decision for later, not a one-off addition here.
 
 **2026-08-23 — real data wired in (feature 20); "Download PDF" un-disabled into a real link.** `contract.dealSummary`/`contract.editPrompt` (mock-only fields) are gone — the card now reads `contract.deal_summary` (real `ContractDoc` field) and derives the Edit-terms prompt from `contract.brand` instead of a bespoke per-item string, same pattern `TrendCard`/`ScriptCard` already use for real data. "Download PDF" is no longer `disabled` — it's now a real `<a href="/api/contracts/:id/pdf">`, since the PDF genuinely exists once feature 20's `services/pdf.ts` + GridFS landed. **New pattern, not yet a shared component:** because `Chip` only renders a `<button>` and a real file download needs an actual `<a>` (so `Content-Disposition: attachment` triggers a browser download instead of a client-side-router click), the anchor is styled with a literal `DOWNLOAD_LINK_CLASSNAME` string that duplicates `Chip`'s classes verbatim rather than extending `Chip` itself to polymorphically render as either tag. This is the second place in the codebase a chip-styled className exists outside `Chip` (the first being the 4 sites `Chip` itself was extracted from in feature 11) — if a third "chip-styled but must be a real `<a>`" case appears, that's the trigger to extract a shared link-chip variant, same threshold feature 11 used.
+
+**2026-08-30 — reversible status toggle chip added (feature 23).** A third chip — "Mark sent"/"Mark as draft" (label flips with current status) — joins "Download PDF" and "Edit terms ↗" in the actions row; the row's className changed from a plain `flex gap-1.5` to `flex flex-wrap items-center gap-1.5` to hold three items cleanly (same wrapper `ScriptCard` adopted this feature for its own two-chip row). Reversible, not one-way — see `progress-tracker.md`'s feature 23 entry. Failure renders a `mt-1.5 text-[11px] text-text-secondary` line below the row, matching `EventItem`'s plain-secondary-text error convention. Shares the exact same `isSubmitting`-must-reset-unconditionally fix as `ScriptCard` (see its entry above) — same bug, same root cause, both cards fixed together.
 
 ---
 

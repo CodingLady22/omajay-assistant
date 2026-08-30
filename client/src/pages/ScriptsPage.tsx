@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getScripts } from "@/lib/api";
 import { useChatPrompt } from "@/lib/useChatPrompt";
 import type { Script } from "@/lib/types";
@@ -12,11 +12,8 @@ export function ScriptsPage() {
   const [scripts, setScripts] = useState<Script[]>([]);
   const [state, setState] = useState<LoadState>("loading");
 
-  useEffect(() => {
-    let cancelled = false;
-
+  const refetch = useCallback(() => {
     getScripts().then((result) => {
-      if (cancelled) return;
       if (result.success) {
         setScripts(result.data);
         setState("ready");
@@ -24,11 +21,11 @@ export function ScriptsPage() {
         setState("error");
       }
     });
-
-    return () => {
-      cancelled = true;
-    };
   }, []);
+
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
 
   if (state === "loading") {
     return (
@@ -61,7 +58,7 @@ export function ScriptsPage() {
     <div className="flex-1 overflow-y-auto px-5.5 py-4.5">
       <div className="flex flex-col gap-2.5">
         {scripts.map((script) => (
-          <ScriptCard key={script._id} script={script} />
+          <ScriptCard key={script._id} script={script} onChange={refetch} />
         ))}
       </div>
       <Chip

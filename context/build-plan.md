@@ -331,9 +331,9 @@ Set up the project shell.
 
 **Logic + UI:**
 
-- `POST /api/scripts/:id/status` — flips a script's `status` to `"posted"`. Zod-validated; `"posted"` is the only valid target (no route needs to reverse it back to `"draft"`).
-- `POST /api/contracts/:id/status` — flips a contract's `status` to `"sent"`, same shape.
-- `ScriptCard`/`ContractCard` each get a small action (matching the existing `<Chip>` pattern) — "Mark posted" / "Mark sent" — that calls the route and refetches the list. Marking a script/contract does not remove it from its library view — it stays visible with an updated status badge; it only stops counting as "unfinished" for the briefing's 14-day-capped query.
+- `POST /api/scripts/:id/status` — flips a script's `status` between `"draft"` and `"posted"`. Zod-validated (`z.enum(["draft", "posted"])`); **reversible**, not one-way — an explicit developer decision made during this feature's `/architect` (diverging from this entry's original spec), since a mis-click otherwise needs manual Mongo surgery to undo.
+- `POST /api/contracts/:id/status` — flips a contract's `status` between `"draft"` and `"sent"`, same shape (`z.enum(["draft", "sent"])`).
+- `ScriptCard`/`ContractCard` each get a small toggle action (matching the existing `<Chip>` pattern) — label reads "Mark posted"/"Mark sent" on the forward direction, "Mark as draft" on the reverse — that calls the route and refetches the list. `ScriptCard` also gets its first-ever status badge (previously carried in the type but never rendered), matching `ContractCard`'s existing neutral `bg-info-bg text-info` treatment. Marking a script/contract does not remove it from its library view — it stays visible with an updated status badge; it only stops counting as "unfinished" for the briefing's 14-day-capped query.
 
 **Verify:** mark a real script posted and a real contract sent through the dashboard; confirm the status badge updates in place (item stays in the library) and a fresh `npm run briefing:test` run no longer lists either as unfinished.
 

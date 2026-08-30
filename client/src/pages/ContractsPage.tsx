@@ -29,11 +29,8 @@ export function ContractsPage() {
     });
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-
+  const refetchContracts = useCallback(() => {
     getContracts().then((result) => {
-      if (cancelled) return;
       if (result.success) {
         setContracts(result.data);
         setState("ready");
@@ -41,11 +38,11 @@ export function ContractsPage() {
         setState("error");
       }
     });
-
-    return () => {
-      cancelled = true;
-    };
   }, []);
+
+  useEffect(() => {
+    refetchContracts();
+  }, [refetchContracts]);
 
   useEffect(() => {
     refetchDocuments();
@@ -78,7 +75,7 @@ export function ContractsPage() {
       {state === "ready" && contracts.length > 0 && (
         <div className="flex flex-col gap-2.5">
           {contracts.map((contract) => (
-            <ContractCard key={contract._id} contract={contract} />
+            <ContractCard key={contract._id} contract={contract} onChange={refetchContracts} />
           ))}
         </div>
       )}
