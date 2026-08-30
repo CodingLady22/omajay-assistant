@@ -1,51 +1,54 @@
-# Memory — Feature 22: Briefing Agent + Scheduled Send
+# Memory — Feature 23: Mark Script Posted / Contract Sent
 
-Last updated: 2026-08-26
+Last updated: 2026-08-30
 
 ## What was built
 
-Feature 22 shipped via the full loop: `/architect` → build → live verify (real run + explicit all-empty-context check) → `/review` (found 1 Important + 3 Minor + 2 Informational) → fixed the Important + 3 Minors → re-verified live → ticked in `progress-tracker.md`.
+Feature 23 shipped via the full loop: `/architect` → build → live verify → `/imprint` → tick `progress-tracker.md` → commit (developer's own commit, `d7608df`) → a follow-up `/code-review` pass caught 3 real issues in the just-shipped refetch logic → fixed → re-verified live (uncommitted as of end of session, left for the developer to review/commit).
 
-**Server — new:**
-- `server/src/agents/briefing-agent.ts` — `gatherContext`/`describeContext`/`composeBriefing`/`buildFallbackBriefing`/`buildBriefing`. Pure (gather + compose only); not a LangGraph node, per `library-docs.md`'s existing rule that the briefing agent is scheduler-invoked only.
-- `server/src/jobs/morning-briefing.ts` — `deliverBriefing(text)` (the pluggable delivery seam: logs + inserts `{ sent_at, content }` into `briefings`, since WhatsApp/feature 05 is still deferred) + `runMorningBriefing()`.
-- `server/src/jobs/run-briefing-test.ts` — `npm run briefing:test`: real run against the live DB, the all-empty context checked explicitly via both the LLM path and the deterministic fallback, all-day date-key assertions across timezones, cron-derivation assertions (valid/missing/malformed `briefing_time`).
+**Server:**
+- `server/src/agents/content-agent.ts` — `setScriptStatus(id, status)` added (reversible `findOneAndUpdate` by `_id`, no current-status filter).
+- `server/src/agents/contracts-agent.ts` — `setContractStatus(id, status)` added, same shape.
+- `server/src/routes/scripts.ts` — `POST /:id/status` added (zod `idParamSchema` + `statusBodySchema` = `z.enum(["draft", "posted"])`).
+- `server/src/routes/contracts.ts` — `POST /:id/status` added, `z.enum(["draft", "sent"])`.
+- `server/src/types/index.ts` — `ContractStatus` type newly named/exported (mirroring the existing `ScriptStatus`).
 
-**Server — modified:**
-- `server/src/jobs/scheduler.ts` — `briefingCronFromTime()` (parses `profile.briefing_time` "HH:MM" → cron, falls back to `"0 8 * * *"` on anything missing/malformed), `loadSchedulingProfile()` (replaces `resolveTimezone()`, fetches the profile once for both jobs instead of twice), both the trends scan and the briefing registered in order.
-- `server/src/agents/calendar-agent.ts` — `/review` fix: `isEventAllDay`/`getEventDateKey`/`todayDateKey` extracted and exported (shared with `briefing-agent.ts`); `formatEventLine`/`buildEventsSummary`/`calendarAgent` now take/pass `profile.timezone` explicitly instead of relying on the server host's default.
-- `server/package.json` — `briefing:test` script added.
+**Client:**
+- `client/src/lib/api.ts` — `setScriptStatus`/`setContractStatus`.
+- `client/src/components/scripts/ScriptCard.tsx` — first-ever status badge (`Draft`/`Posted`, `bg-info-bg text-info`, next to the kind badge) + a reversible toggle `<Chip>` ("Mark posted" ⇄ "Mark as draft"), `onChange?: () => void` prop.
+- `client/src/components/contracts/ContractCard.tsx` — same toggle chip pattern ("Mark sent" ⇄ "Mark as draft"), `onChange?: () => void` prop.
+- `client/src/pages/ScriptsPage.tsx` / `ContractsPage.tsx` — fetch logic extracted into a `refetch`/`refetchContracts` callback passed down as `onChange`; **post-ship hardened** with a `requestIdRef` (ignore out-of-order/superseded responses) and a `hasLoadedRef` + `refreshError` state (a post-mount refetch failure no longer blanks an already-rendered list — it keeps existing cards and shows a small inline note instead; only a genuine *initial*-load failure gets the full-screen error).
+- `client/src/components/calendar/EventItem.tsx` — one-line stale-comment fix (`feature 23's` → `feature 25's` unified error-styling pass reference).
 
-**Client:** no changes this feature — `build-plan.md`'s feature 22 entry has no UI section, and none was added.
-
-**Docs updated:** `context/build-plan.md` (new feature 23 "Mark Script Posted / Contract Sent" inserted right after 22; Settings 23→24, Empty States 24→25; Feature Count table updated to 25 total), `context/progress-tracker.md` (feature 22 ticked, full Decisions/Notes recorded, feature 23 added to the checklist, 3 stale "feature 23/24" cross-references fixed), `context/ui-registry.md` (2 stale cross-references fixed).
+**Docs:** `context/build-plan.md` (feature 23 entry corrected: reversible not one-way), `context/progress-tracker.md` (ticked, full decisions + the post-ship `/code-review` fix writeup recorded, Current Status moved to Phase 9 / next = feature 24), `context/ui-registry.md` (`ScriptCard`/`ContractCard` entries re-imprinted in place).
 
 ## Decisions made
 
-- **"Unfinished" scope capped to the last 14 days**, not all drafts regardless of age. No route anywhere ever flips a script's `status` to `"posted"` or a contract's to `"sent"` — an uncapped query would resurface every draft forever. 14 days (not 7) was chosen deliberately: a short cap drops exactly the highest-value reminders (something forgotten 10+ days ago).
-- **New feature 23 inserted immediately after 22** to close that gap for real (one status-flip route + one UI action each) — the 14-day cap is an explicit, temporary approximation, not a fix. Same insertion/renumbering pattern the project already used for feature 21.
-- **`getProfile()` was confirmed already moved** into `db/profile.ts` back in feature 11 — `build-plan.md`'s feature-22 note (written when feature 09 deferred the move) was stale, not the codebase. Verified before assuming the note was current.
-- **Delivery seam lives at the job layer, not in the agent.** `briefing-agent.ts` stays pure; `jobs/morning-briefing.ts` owns `deliverBriefing`. This is the first job in the codebase to write to Mongo directly rather than through an agent-exported function — disclosed during `/review`, confirmed intentional, kept as-is.
-- **Composition is a real LLM call (temperature 0.3, the shared default)**, not deterministic templating like `calendar-agent.ts`'s `buildEventsSummary` — falls back to a deterministic template (`buildFallbackBriefing`) on any composition failure.
+- **Status transitions are reversible (draft ⇄ posted / draft ⇄ sent), not one-way** — a deliberate developer-driven divergence from `build-plan.md`'s original spec, decided during `/architect`. Reason: a mis-click otherwise needs manual Mongo surgery to undo, same logic as the calendar's Discard action. One route serves both directions per resource.
+- **`ScriptCard`'s new status badge is always-shown** (mirrors `ContractCard`, not `EventItem`'s conditionally-rendered Pending badge) — the two cards are structural twins, and "draft" is a normal steady state, not transient.
+- **No `ConfirmDialog` on the toggle** — nothing is destroyed and it's reversible, doesn't meet the bar `ConfirmDialog` is reserved for (real data loss, per `DocumentRow`'s precedent).
+- **No new orchestrator intent / chat path** — dashboard-only, per the original scope.
+- **Follow-up recorded, not built:** feature 22's briefing can eventually filter on real `status` instead of its 14-day recency cap, now that real transitions exist. The cap still does no harm (it's now redundant safety, not the only mechanism) — a candidate for a future polish pass, not scoped to any planned feature.
 
 ## Problems solved
 
-- **Important timezone bug (found in `/review`), fixed together with its twin in feature 13's `calendar-agent.ts` per explicit instruction not to fix one and leave the other.** All-day Google Calendar events are normalized to a timezone-naive `"T00:00:00"`/`"T23:59:00"` string with no real zone attached. Constructing a `Date` from that naive string let the server host's own local timezone leak into date comparisons/labels that should only ever depend on `profile.timezone` — on a UTC host with Sofia in Europe/Rome, an all-day event could resolve to the wrong day. Fixed by reading an all-day event's date directly from the string (never through `new Date()` + ambient-zone interpretation) in the new shared `isEventAllDay`/`getEventDateKey`/`todayDateKey` helpers.
-- **Verified genuinely host-independent**, not just re-tested under the same default twice: ran the all-day date-key check under `process.env.TZ` = `UTC`, `Pacific/Kiritimati` (UTC+14), and `Etc/GMT+12` (UTC-12) — a 26-hour spread — all three produced the identical, correct `"2026-08-25"`.
-- **Dev-environment gotcha discovered along the way: Git Bash/MSYS on this Windows machine silently drops any `TZ` env value containing a `/`** (its path-conversion heuristic mistakes an IANA zone name like `Pacific/Kiritimati` for a filesystem path). `TZ=UTC` works fine via Bash (no slash); a real non-UTC zone needs PowerShell's `$env:TZ = "..."` instead. Cost real verification time — two `TZ=Pacific/Kiritimati npm run briefing:test` Bash runs silently no-op'd on this before being caught (the log line `process TZ=(host default)` was the tell).
-- **3 Minor `/review` findings also fixed:** the 3-way duplicated `isAllDay` (now one shared implementation in `calendar-agent.ts`), a missing why-comment on the `en-CA` locale trick, and an untested cron-fallback path (now exercised directly in `briefing:test` via exported `briefingCronFromTime`/`DEFAULT_BRIEFING_CRON`).
-- **2 Informational findings** (the job-level direct `briefings` write, the small `registerJobs` refactor) were disclosed, confirmed as intentional by the developer, and left as-is — not defects.
+- **Real bug, caught only by live double-click testing, not by `tsc` or a static read:** `handleToggleStatus` in both cards originally reset `isSubmitting` back to `false` only on the failure branch. Unlike `EventItem`'s Confirm/Discard (whose buttons vanish once `isProposed` flips false), this toggle button is always rendered and the card keeps the same component instance across a refetch — so after one successful toggle, the button stayed permanently disabled. Fixed by resetting `isSubmitting` unconditionally right after the request resolves.
+- **Post-ship `/code-review` found 2 more real bugs in the refetch refactor** (both from the same root cause — the original mount-only fetch never needed guards that multi-trigger `onChange`-driven refetch now does): (1) an out-of-order response race — two overlapping GETs (e.g. toggling two cards fast) could resolve in dispatch-reversed order and silently revert a change that had already succeeded server-side; fixed with a `requestIdRef` counter that ignores a superseded response. (2) a transient background-refetch failure was flipping the *entire panel* to the full-screen error state, hiding every card even though the triggering write had persisted; fixed by reserving the full-screen error for genuine initial-load failures only (`hasLoadedRef`), showing a small inline note on a later blip instead.
+- **Both fixes re-verified live via Playwright** using response-timing tricks (delay only response *delivery*, not the underlying request, so the DB read stays accurate to real dispatch time) rather than trusted on read-through alone.
+- **Dev-environment gotcha discovered while writing the failure-test script: this app runs under React `StrictMode`, which double-invokes the mount effect in dev.** A naive request-count-based Playwright intercept can accidentally target half of that double-mount instead of the real toggle-triggered refetch — the fix was to let the initial load fully settle before attaching interception. Worth remembering for any future test written against this dev server.
+- **Environment note, not a code issue:** this harness's default Bash sandbox blocks outbound TCP on MongoDB's port 27017 (HTTPS/443 still passes) — `dangerouslyDisableSandbox: true` is needed on any command reaching the real Atlas cluster or launching a real browser (Playwright) for live verification. A one-off transient Atlas TLS handshake failure (`SSL alert number 80`) also occurred once and resolved on a plain retry — unrelated to any code change.
 
 ## Current state
 
-- **Feature 22 complete, reviewed (all actionable findings fixed and re-verified live), ticked in `progress-tracker.md`.** `tsc -b --noEmit` clean on `server/` throughout.
-- Verified live end-to-end against the real stack: a real briefing run gathered actual leftover script/contract drafts from prior features' testing and composed a natural reminder, then delivered it (logged + a real row inserted into `briefings`); the all-empty context read naturally via both the LLM path and the deterministic fallback; a real `npm run dev` boot confirmed both cron jobs register correctly and in the required order (6am trends scan before 8am briefing, both reading the real seeded profile's `Europe/Rome` timezone).
-- Repo state: the developer said they committed the initial build themselves mid-session; my subsequent `/review`-fix changes (the timezone fix across `briefing-agent.ts`/`calendar-agent.ts`/`run-briefing-test.ts`/`scheduler.ts`) plus all doc updates were made after that and have **not** been committed by me — per standing instruction to only commit when asked.
-- No dev servers left running; the `tmp-tz-check.ts` scratch file used for the PowerShell timezone verification was deleted after use.
+- **Feature 23 functionally complete and live-verified twice** — once for the original build (ticked in `progress-tracker.md`, committed by the developer as `d7608df`), and once more for the post-ship `/code-review` fix pass (server routes via `curl`, full Playwright click-throughs, and the actual loop-closing check: marked the real Velour contract "sent" through the UI and confirmed `npm run briefing:test` dropped it from the unfinished list).
+- `tsc -b --noEmit` clean on both `server/` and `client/` throughout, including after the fix pass.
+- **Uncommitted as of end of session:** `client/src/pages/ContractsPage.tsx`, `client/src/pages/ScriptsPage.tsx` (the race/blank-on-blip fixes), and `context/progress-tracker.md` (the writeup of that fix). Everything else for this feature is already committed. Developer said they're handling commits themselves — left as-is.
+- All real database records touched during verification (a script briefly marked posted, the real Velour Cosmetics contract briefly marked sent) were restored to their original `draft` status afterward. No real data left altered.
+- No dev servers left running; all scratch Playwright test files cleaned up.
 
 ## Next session starts with
 
-**Feature 23 — Mark Script Posted / Contract Sent** (new, inserted this session), per `build-plan.md`: `POST /api/scripts/:id/status` (flips `"draft"` → `"posted"`) and `POST /api/contracts/:id/status` (flips `"draft"` → `"sent"`), plus a small `<Chip>`-style action on `ScriptCard`/`ContractCard` to trigger each. Marking an item doesn't remove it from its library view — only from the briefing's 14-day-capped "unfinished" query. Run `/architect` first per the project's loop.
+**Feature 24 — Settings Panel**, per `build-plan.md`: WhatsApp briefing settings (time, which reminders on/off) persisted to `profile`, plus connected-accounts status (Instagram, YouTube, Google Calendar, WhatsApp). Run `/architect` first per the project's loop. Before starting, confirm with the developer whether the feature-23 uncommitted fixes have been committed.
 
 ## Open questions
 
@@ -55,4 +58,4 @@ Feature 22 shipped via the full loop: `/architect` → build → live verify (re
 - Whether a self-explaining-disabled-control pattern should become a deliberate app-wide decision — carried over from feature 19, still undecided.
 - Whether `ContractCard`'s duplicated download-link className should be extracted into a shared link-chip component — carried over from feature 20, still open.
 - The `<select>` in `UploadDocumentForm` deviates slightly from `ui-tokens.md`'s Input spec — carried over from feature 21, not corrected in isolation.
-- New: the Git Bash/MSYS "TZ with a slash gets silently dropped" quirk on this dev machine isn't a code issue, just something to remember — use PowerShell's `$env:TZ` for any future non-UTC timezone testing here.
+- New: feature 22's briefing 14-day recency cap could eventually be replaced with a real `status`-based filter now that feature 23 exists — recorded as a future polish candidate, not scoped to any planned feature.

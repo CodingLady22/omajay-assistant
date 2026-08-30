@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getContracts, getDocuments } from "@/lib/api";
 import { useChatPrompt } from "@/lib/useChatPrompt";
 import type { Contract, DocumentSummary } from "@/lib/types";
@@ -13,6 +13,7 @@ export function ContractsPage() {
   const goToChat = useChatPrompt();
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [state, setState] = useState<LoadState>("loading");
+  const [refreshError, setRefreshError] = useState(false);
 
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [documentsState, setDocumentsState] = useState<LoadState>("loading");
@@ -29,11 +30,25 @@ export function ContractsPage() {
     });
   }, []);
 
+  // refetchContracts is called both on mount and from every card's onChange
+  // (a status toggle) — see ScriptsPage.tsx's refetch for the identical race
+  // (requestIdRef ignores a superseded response) and blank-on-blip (a
+  // post-mount failure keeps existing data + a small inline note instead of
+  // replacing the whole panel) problems this shares with it.
+  const requestIdRef = useRef(0);
+  const hasLoadedRef = useRef(false);
+
   const refetchContracts = useCallback(() => {
+    const requestId = ++requestIdRef.current;
     getContracts().then((result) => {
+      if (requestId !== requestIdRef.current) return;
       if (result.success) {
         setContracts(result.data);
         setState("ready");
+        setRefreshError(false);
+        hasLoadedRef.current = true;
+      } else if (hasLoadedRef.current) {
+        setRefreshError(true);
       } else {
         setState("error");
       }
@@ -73,11 +88,18 @@ export function ContractsPage() {
       )}
 
       {state === "ready" && contracts.length > 0 && (
-        <div className="flex flex-col gap-2.5">
-          {contracts.map((contract) => (
-            <ContractCard key={contract._id} contract={contract} onChange={refetchContracts} />
-          ))}
-        </div>
+        <>
+          {refreshError && (
+            <div className="mb-2 text-[12px] text-text-secondary">
+              Couldn't refresh the list — showing the last loaded data.
+            </div>
+          )}
+          <div className="flex flex-col gap-2.5">
+            {contracts.map((contract) => (
+              <ContractCard key={contract._id} contract={contract} onChange={refetchContracts} />
+            ))}
+          </div>
+        </>
       )}
 
       <div className="mt-6">

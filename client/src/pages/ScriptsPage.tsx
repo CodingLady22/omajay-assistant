@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getScripts } from "@/lib/api";
 import { useChatPrompt } from "@/lib/useChatPrompt";
 import type { Script } from "@/lib/types";
@@ -11,12 +11,31 @@ export function ScriptsPage() {
   const goToChat = useChatPrompt();
   const [scripts, setScripts] = useState<Script[]>([]);
   const [state, setState] = useState<LoadState>("loading");
+  const [refreshError, setRefreshError] = useState(false);
+
+  // refetch is called both on mount and from every card's onChange (a status
+  // toggle) — toggling two cards in quick succession can fire two overlapping
+  // GET /api/scripts calls that resolve out of order. requestIdRef lets a
+  // response recognize it's been superseded and ignore itself rather than
+  // overwriting newer state with stale data.
+  const requestIdRef = useRef(0);
+  // Once the list has loaded successfully once, a later refetch failure (e.g.
+  // a transient blip after a toggle) shouldn't blank an already-rendered list
+  // the way an initial-load failure should — it keeps the existing cards and
+  // surfaces a small inline note instead.
+  const hasLoadedRef = useRef(false);
 
   const refetch = useCallback(() => {
+    const requestId = ++requestIdRef.current;
     getScripts().then((result) => {
+      if (requestId !== requestIdRef.current) return;
       if (result.success) {
         setScripts(result.data);
         setState("ready");
+        setRefreshError(false);
+        hasLoadedRef.current = true;
+      } else if (hasLoadedRef.current) {
+        setRefreshError(true);
       } else {
         setState("error");
       }
@@ -56,6 +75,11 @@ export function ScriptsPage() {
 
   return (
     <div className="flex-1 overflow-y-auto px-5.5 py-4.5">
+      {refreshError && (
+        <div className="mb-2 text-[12px] text-text-secondary">
+          Couldn't refresh the list — showing the last loaded data.
+        </div>
+      )}
       <div className="flex flex-col gap-2.5">
         {scripts.map((script) => (
           <ScriptCard key={script._id} script={script} onChange={refetch} />
