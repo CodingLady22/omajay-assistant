@@ -1,4 +1,5 @@
 import type {
+  BriefingReminders,
   CalendarEvent,
   Contract,
   ContractStatus,
@@ -6,6 +7,7 @@ import type {
   DocumentSummary,
   Script,
   ScriptStatus,
+  Settings,
   Trend,
 } from "@/lib/types";
 
@@ -105,4 +107,15 @@ export async function uploadDocument(
 
 export async function deleteDocument(source: string): Promise<ApiResponse<{ deletedCount: number }>> {
   return request(`/api/documents/${encodeURIComponent(source)}`, { method: "DELETE" });
+}
+
+export async function getSettings(): Promise<ApiResponse<Settings>> {
+  return request("/api/settings");
+}
+
+export async function updateSettings(briefingTime: string, reminders: BriefingReminders): Promise<ApiResponse<Settings>> {
+  return request("/api/settings", {
+    method: "POST",
+    body: JSON.stringify({ briefingTime, reminders }),
+  });
 }

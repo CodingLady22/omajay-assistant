@@ -1,8 +1,9 @@
 import { getEventDateKey, getUpcomingEvents, isEventAllDay, todayDateKey } from "@/agents/calendar-agent";
 import { collections } from "@/db/collections";
+import { withReminderDefaults } from "@/db/profile";
 import { llm } from "@/lib/llm";
 import { logger } from "@/lib/logger";
-import type { CalendarEventView, ContractDoc, Dm, Profile, ScriptDoc } from "@/types";
+import type { BriefingReminders, CalendarEventView, ContractDoc, Dm, Profile, ScriptDoc } from "@/types";
 
 // How far back a draft script/contract still counts as "unfinished" for the
 // briefing. There is no route anywhere yet that flips a script to "posted"
@@ -17,6 +18,7 @@ const RECENT_WINDOW_DAYS = 14;
 type BriefingContext = {
   today: string;
   timezone: string;
+  reminders: BriefingReminders;
   events: CalendarEventView[];
   draftScripts: ScriptDoc[];
   draftContracts: ContractDoc[];
@@ -109,54 +111,80 @@ async function gatherPendingDms(): Promise<Dm[]> {
   }
 }
 
+// A disabled category is never fetched — not fetched-then-hidden. Keeps the
+// toggle honest (no DB hit, no chance of it leaking into the briefing text)
+// and means describeContext/buildFallbackBriefing below don't need their own
+// "is this enabled" checks for scripts/contracts/dms — an empty array reads
+// identically whether nothing was found or the category was switched off.
 async function gatherContext(profile: Profile | null): Promise<BriefingContext> {
   const timezone = profile?.timezone ?? "UTC";
+  const reminders = withReminderDefaults(profile?.reminders);
   const [events, draftScripts, draftContracts, pendingDms] = await Promise.all([
-    gatherTodayEvents(timezone),
-    gatherRecentDraftScripts(),
-    gatherRecentDraftContracts(),
-    gatherPendingDms(),
+    reminders.events ? gatherTodayEvents(timezone) : Promise.resolve([]),
+    reminders.scripts ? gatherRecentDraftScripts() : Promise.resolve([]),
+    reminders.contracts ? gatherRecentDraftContracts() : Promise.resolve([]),
+    reminders.dms ? gatherPendingDms() : Promise.resolve([]),
   ]);
-  return { today: formatToday(timezone), timezone, events, draftScripts, draftContracts, pendingDms };
+  return { today: formatToday(timezone), timezone, reminders, events, draftScripts, draftContracts, pendingDms };
 }
 
 // --- Composition ---
 
+// A disabled category's section is left out of the context string entirely
+// — not included with an "empty" placeholder — so the LLM has no way to
+// mention it, on or off. Distinct from a genuinely-empty-but-enabled
+// category, which still gets its section with an explicit "nothing here"
+// line (context.events.length === 0 reads identically for "off" and "empty"
+// upstream, but only the enabled case ever reaches this function's output).
 function describeContext(context: BriefingContext): string {
-  const eventsText =
-    context.events.length === 0
-      ? "Nothing on the calendar today."
-      : context.events
-          .map((event) => `- ${event.title}${event.location ? ` (${event.location})` : ""} at ${formatEventTime(event, context.timezone)}`)
-          .join("\n");
+  const sections: string[] = [];
 
-  const scriptsText =
-    context.draftScripts.length === 0
-      ? "No unfinished script drafts."
-      : context.draftScripts.map((script) => `- "${script.title}" (${script.kind}, drafted ${daysAgoLabel(script.created_at)})`).join("\n");
+  if (context.reminders.events) {
+    const eventsText =
+      context.events.length === 0
+        ? "Nothing on the calendar today."
+        : context.events
+            .map((event) => `- ${event.title}${event.location ? ` (${event.location})` : ""} at ${formatEventTime(event, context.timezone)}`)
+            .join("\n");
+    sections.push(`Calendar:\n${eventsText}`);
+  }
 
-  const contractsText =
-    context.draftContracts.length === 0
-      ? "No unsent contract drafts."
-      : context.draftContracts.map((contract) => `- ${contract.brand} (drafted ${daysAgoLabel(contract.created_at)})`).join("\n");
+  if (context.reminders.scripts) {
+    const scriptsText =
+      context.draftScripts.length === 0
+        ? "No unfinished script drafts."
+        : context.draftScripts.map((script) => `- "${script.title}" (${script.kind}, drafted ${daysAgoLabel(script.created_at)})`).join("\n");
+    sections.push(`Unfinished script drafts:\n${scriptsText}`);
+  }
 
-  const dmsText =
-    context.pendingDms.length === 0
-      ? "No brand DMs waiting on a reply."
-      : context.pendingDms.map((dm) => `- ${dm.sender_name} (${dm.classification})`).join("\n");
+  if (context.reminders.contracts) {
+    const contractsText =
+      context.draftContracts.length === 0
+        ? "No unsent contract drafts."
+        : context.draftContracts.map((contract) => `- ${contract.brand} (drafted ${daysAgoLabel(contract.created_at)})`).join("\n");
+    sections.push(`Unsent contract drafts:\n${contractsText}`);
+  }
 
-  return `Today: ${context.today}\n\nCalendar:\n${eventsText}\n\nUnfinished script drafts:\n${scriptsText}\n\nUnsent contract drafts:\n${contractsText}\n\nBrand DMs needing a reply:\n${dmsText}`;
+  if (context.reminders.dms) {
+    const dmsText =
+      context.pendingDms.length === 0
+        ? "No brand DMs waiting on a reply."
+        : context.pendingDms.map((dm) => `- ${dm.sender_name} (${dm.classification})`).join("\n");
+    sections.push(`Brand DMs needing a reply:\n${dmsText}`);
+  }
+
+  return [`Today: ${context.today}`, ...sections].join("\n\n");
 }
 
 const BRIEFING_SYSTEM_PROMPT = `You write Sofia's short morning briefing message, from her AI assistant for her makeup/beauty content business.
 
-You're given today's date, today's calendar, her unfinished script drafts, unsent contract drafts, and brand DMs needing a reply.
+You're given today's date, plus up to four sections: today's calendar, her unfinished script drafts, unsent contract drafts, and brand DMs needing a reply. She controls each section independently — a section is left out entirely when she's turned it off, not included empty. Only ever discuss a section that is actually present in what you're given.
 
 Write a warm, concise briefing (3-5 sentences, plain text, no markdown, no headers or bullet lists) that:
 - Greets her and mentions today's day/date
-- Summarizes what's on today's calendar, or says the day is open if nothing is scheduled
-- Reminds her of anything unfinished ONLY if something is actually listed — never invent a reminder that isn't in the given lists
-- If everything given is empty (nothing today, nothing unfinished, no DMs waiting), say so briefly and positively — don't force a reminder that doesn't apply, don't pad the message
+- If a Calendar section is given, summarizes it (or says the day is open if it says nothing's scheduled) — if no Calendar section is given, don't mention the calendar at all
+- Reminds her of anything unfinished ONLY if something is actually listed in a given section — never invent a reminder for a section that wasn't given, and never invent a reminder that isn't in a given list
+- If every section that IS given is empty, say so briefly and positively — don't force a reminder that doesn't apply, don't pad the message
 - Ends by asking what her plan is for the day
 
 Keep it WhatsApp-friendly: short and plain.`;
@@ -180,27 +208,36 @@ export async function composeBriefing(context: BriefingContext): Promise<string>
   }
 }
 
+// Same "skip mentioning a disabled category" rule as describeContext above,
+// applied to the deterministic fallback: a line is omitted (not shown as
+// "nothing here") whenever the reminder(s) it would summarize are off.
 export function buildFallbackBriefing(context: BriefingContext): string {
+  const { reminders } = context;
   const hasEvents = context.events.length > 0;
   const hasUnfinished = context.draftScripts.length > 0 || context.draftContracts.length > 0 || context.pendingDms.length > 0;
 
-  const scheduleLine = hasEvents
-    ? `Today you've got ${context.events.length} thing${context.events.length === 1 ? "" : "s"} on the calendar.`
-    : "Nothing on your calendar today.";
+  const scheduleLine = !reminders.events
+    ? null
+    : hasEvents
+      ? `Today you've got ${context.events.length} thing${context.events.length === 1 ? "" : "s"} on the calendar.`
+      : "Nothing on your calendar today.";
 
-  const reminders: string[] = [];
+  const reminderLines: string[] = [];
   if (context.draftScripts.length > 0) {
-    reminders.push(`${context.draftScripts.length} script draft${context.draftScripts.length === 1 ? "" : "s"}`);
+    reminderLines.push(`${context.draftScripts.length} script draft${context.draftScripts.length === 1 ? "" : "s"}`);
   }
   if (context.draftContracts.length > 0) {
-    reminders.push(`${context.draftContracts.length} contract${context.draftContracts.length === 1 ? "" : "s"} to send`);
+    reminderLines.push(`${context.draftContracts.length} contract${context.draftContracts.length === 1 ? "" : "s"} to send`);
   }
   if (context.pendingDms.length > 0) {
-    reminders.push(`${context.pendingDms.length} brand DM${context.pendingDms.length === 1 ? "" : "s"} waiting on a reply`);
+    reminderLines.push(`${context.pendingDms.length} brand DM${context.pendingDms.length === 1 ? "" : "s"} waiting on a reply`);
   }
-  const reminderLine = hasUnfinished ? `Still open: ${reminders.join(", ")}.` : "Nothing outstanding right now.";
+  const tracksUnfinished = reminders.scripts || reminders.contracts || reminders.dms;
+  const reminderLine = !tracksUnfinished ? null : hasUnfinished ? `Still open: ${reminderLines.join(", ")}.` : "Nothing outstanding right now.";
 
-  return `Good morning! ${scheduleLine} ${reminderLine} What's your plan for today?`;
+  return ["Good morning!", scheduleLine, reminderLine, "What's your plan for today?"]
+    .filter((line): line is string => line !== null)
+    .join(" ");
 }
 
 export type { BriefingContext };

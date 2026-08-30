@@ -1,5 +1,15 @@
 import type { ObjectId } from "mongodb";
 
+// Which content categories the daily morning briefing includes — see
+// agents/briefing-agent.ts. Missing/legacy profiles (predating this field)
+// default every category to true; see db/profile.ts's withReminderDefaults.
+export type BriefingReminders = {
+  events: boolean;
+  scripts: boolean;
+  contracts: boolean;
+  dms: boolean;
+};
+
 export type Profile = {
   _id?: ObjectId;
   name: string;
@@ -9,8 +19,26 @@ export type Profile = {
   style_notes: string;
   briefing_time: string;
   timezone: string;
+  reminders?: BriefingReminders;
   created_at: Date;
   updated_at: Date;
+};
+
+// Presence-of-env-vars only (lib/env.ts's isConfigured helpers) — GET/POST
+// /api/settings's connected-accounts block, not a live API health check.
+export type ConnectionStatus = {
+  whatsapp: boolean;
+  instagram: boolean;
+  youtube: boolean;
+  googleCalendar: boolean;
+};
+
+// GET/POST /api/settings's full response shape (routes/settings.ts).
+export type SettingsPayload = {
+  briefingTime: string;
+  timezone: string;
+  reminders: BriefingReminders;
+  connections: ConnectionStatus;
 };
 
 export type Trend = {

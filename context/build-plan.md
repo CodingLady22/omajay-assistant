@@ -345,10 +345,11 @@ Set up the project shell.
 
 **UI + Logic:**
 
-- WhatsApp briefing settings (time, which reminders on/off) — persisted to `profile`.
-- Connected-accounts status: Instagram, YouTube, Google Calendar, WhatsApp.
+- WhatsApp briefing settings (time, which reminders on/off) — persisted to `profile`. "Reminders" map to the four real content categories `briefing-agent.ts` already gathers (events, scripts, contracts, DMs), not the design mock's three fictional real-time alert channels (a divergence confirmed during `/architect` — those channels don't exist in this system; only the one daily briefing is autonomous outbound, per `architecture.md`'s hard safety rule).
+- Connected-accounts status: Instagram, YouTube, Google Calendar, WhatsApp — a presence-of-required-env-vars check, not a live API call.
+- Changing the briefing time reschedules the live cron task immediately (`jobs/scheduler.ts`'s `rescheduleBriefing`), not just on the next restart.
 
-**Verify:** changing briefing time updates `profile` and the schedule respects it.
+**Verify:** changing briefing time updates `profile` and the schedule respects it — confirmed live via `node-cron`'s registered pattern changing on save, not just the stored value.
 
 ---
 

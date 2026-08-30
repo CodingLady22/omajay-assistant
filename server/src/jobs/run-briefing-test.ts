@@ -1,6 +1,7 @@
 import { buildFallbackBriefing, composeBriefing, type BriefingContext } from "@/agents/briefing-agent";
 import { getEventDateKey, isEventAllDay } from "@/agents/calendar-agent";
 import { closeDatabaseConnection, connectToDatabase } from "@/db/client";
+import { DEFAULT_REMINDERS } from "@/db/profile";
 import { briefingCronFromTime, DEFAULT_BRIEFING_CRON } from "@/jobs/scheduler";
 import { runMorningBriefing } from "@/jobs/morning-briefing";
 import { logger } from "@/lib/logger";
@@ -14,10 +15,21 @@ import type { CalendarEventView } from "@/types";
 const EMPTY_CONTEXT: BriefingContext = {
   today: "Tuesday, August 25, 2026",
   timezone: "Europe/Rome",
+  reminders: DEFAULT_REMINDERS,
   events: [],
   draftScripts: [],
   draftContracts: [],
   pendingDms: [],
+};
+
+// Same shape as EMPTY_CONTEXT, but every reminder toggled off — proves a
+// disabled category is genuinely absent from the composed briefing (feature
+// 24), not merely reported as empty. Both contexts have identical (empty)
+// underlying data; only `reminders` differs, so any difference in output is
+// attributable to the toggles, not the data.
+const ALL_REMINDERS_OFF_CONTEXT: BriefingContext = {
+  ...EMPTY_CONTEXT,
+  reminders: { events: false, scripts: false, contracts: false, dms: false },
 };
 
 // A real all-day event as services/google-calendar.ts's normalizeEvent
@@ -57,6 +69,20 @@ async function main(): Promise<void> {
   logger.info("jobs/run-briefing-test", "--- All-empty context (deterministic fallback) ---");
   const emptyFallbackBriefing = buildFallbackBriefing(EMPTY_CONTEXT);
   logger.info("jobs/run-briefing-test", `Empty-context fallback briefing: ${emptyFallbackBriefing}`);
+  assertEqual(
+    "buildFallbackBriefing — all reminders on, genuinely nothing to report",
+    emptyFallbackBriefing,
+    "Good morning! Nothing on your calendar today. Nothing outstanding right now. What's your plan for today?"
+  );
+
+  logger.info("jobs/run-briefing-test", "--- All reminders off (proves a disabled category is absent, not just empty) ---");
+  const allOffFallbackBriefing = buildFallbackBriefing(ALL_REMINDERS_OFF_CONTEXT);
+  logger.info("jobs/run-briefing-test", `All-reminders-off fallback briefing: ${allOffFallbackBriefing}`);
+  assertEqual(
+    "buildFallbackBriefing — all reminders off",
+    allOffFallbackBriefing,
+    "Good morning! What's your plan for today?"
+  );
 
   logger.info(
     "jobs/run-briefing-test",
