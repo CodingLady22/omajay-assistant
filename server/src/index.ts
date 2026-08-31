@@ -9,6 +9,7 @@ import chatRouter from "@/routes/chat";
 import contractsRouter from "@/routes/contracts";
 import documentsRouter from "@/routes/documents";
 import scriptsRouter from "@/routes/scripts";
+import settingsRouter from "@/routes/settings";
 import trendsRouter from "@/routes/trends";
 
 async function bootstrap(): Promise<void> {
@@ -30,6 +31,7 @@ async function bootstrap(): Promise<void> {
   app.use("/api/calendar", calendarRouter);
   app.use("/api/contracts", contractsRouter);
   app.use("/api/documents", documentsRouter);
+  app.use("/api/settings", settingsRouter);
 
   app.listen(env.PORT, () => {
     logger.info("index", `Server listening on port ${env.PORT}`);

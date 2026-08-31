@@ -20,6 +20,29 @@ After building any component — run **`/imprint`** to capture it here. Don't fi
 
 ## Components
 
+### SettingsPage (briefing card + connected-accounts card)
+
+File: client/src/pages/SettingsPage.tsx
+Last updated: 2026-08-30
+
+| Property         | Class                                                                 |
+| ---------------- | ---------------------------------------------------------------------- |
+| Background       | `bg-surface` (card)                                                    |
+| Border            | `border-[0.5px] border-border` (card); `border-b-[0.5px] border-border last:border-b-0` (row divider) |
+| Border radius     | `rounded-lg` (card)                                                    |
+| Text — primary    | `text-text-primary` (card title `text-[13px] font-medium`, row label `text-xs`) |
+| Text — secondary  | `text-text-secondary` (card description `text-xs leading-[1.6]`, "Off"/"Not connected" status) |
+| Text — accent     | `text-success` + `font-medium` (an "On"/"Connected" status word)       |
+| Spacing           | `px-4.5 py-4` card padding · `py-2.25` row padding · `mb-1.5`/`mb-3.5` title/description gaps · `mb-3` gap between the two cards |
+| Hover state       | `hover:opacity-70` (clickable reminder-toggle rows); `hover:opacity-85` (primary Save button, matching the existing `disabled:opacity-40` pattern) |
+| Shadow            | none                                                                    |
+| Accent usage      | primary button: `bg-pink text-white` (matches existing chip/button primary treatment) |
+
+**Pattern notes:**
+This is the first place a status word is genuinely interactive (a click toggles it), not purely display text — the mock's `wa-row`/`wa-row-status` classes were display-only. Reused the exact same visual language (`text-success` for "On", row layout, `py-2.25`/`border-b-[0.5px]` row divider matching the mock's `padding: 9px 0; border-bottom: 0.5px solid var(--border)` precisely) rather than inventing a toggle-switch component — confirmed during `/architect` since no switch/checkbox token exists yet in `ui-tokens.md`. The whole row is a `<button>` (not just the status word) for a larger, easier-to-hit click target; `last:border-b-0` replaces the mock's `:last-child` rule. The time `<input type="time">` follows `ui-tokens.md`'s documented Input spec exactly (`rounded-md border-[0.5px] border-border bg-surface px-3 py-2 focus:border-pink-mid`) rather than `UploadDocumentForm`'s slightly looser ad hoc select styling — worth reconciling `UploadDocumentForm`'s select to the same spec in a future pass, flagged here rather than fixed in place to avoid touching an unrelated file for this feature.
+
+---
+
 ### Sidebar
 
 File: client/src/components/layout/Sidebar.tsx

@@ -99,6 +99,30 @@ export type Contract = {
   created_at: string;
 };
 
+// Mirrors server/src/types/index.ts's BriefingReminders — which content
+// categories the one daily morning briefing includes.
+export type BriefingReminders = {
+  events: boolean;
+  scripts: boolean;
+  contracts: boolean;
+  dms: boolean;
+};
+
+export type ConnectionStatus = {
+  whatsapp: boolean;
+  instagram: boolean;
+  youtube: boolean;
+  googleCalendar: boolean;
+};
+
+// Mirrors GET/POST /api/settings's response shape (routes/settings.ts).
+export type Settings = {
+  briefingTime: string;
+  timezone: string;
+  reminders: BriefingReminders;
+  connections: ConnectionStatus;
+};
+
 export type DocType = "rate_card" | "contract";
 
 // Mirrors server/src/rag/ingest.ts's `listDocuments()` return shape — one

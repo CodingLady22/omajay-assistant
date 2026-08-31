@@ -345,10 +345,11 @@ Set up the project shell.
 
 **UI + Logic:**
 
-- WhatsApp briefing settings (time, which reminders on/off) — persisted to `profile`.
-- Connected-accounts status: Instagram, YouTube, Google Calendar, WhatsApp.
+- WhatsApp briefing settings (time, which reminders on/off) — persisted to `profile`. "Reminders" map to the four real content categories `briefing-agent.ts` already gathers (events, scripts, contracts, DMs), not the design mock's three fictional real-time alert channels (a divergence confirmed during `/architect` — those channels don't exist in this system; only the one daily briefing is autonomous outbound, per `architecture.md`'s hard safety rule).
+- Connected-accounts status: Instagram, YouTube, Google Calendar, WhatsApp — a presence-of-required-env-vars check, not a live API call.
+- Changing the briefing time reschedules the live cron task immediately (`jobs/scheduler.ts`'s `rescheduleBriefing`), not just on the next restart.
 
-**Verify:** changing briefing time updates `profile` and the schedule respects it.
+**Verify:** changing briefing time updates `profile` and the schedule respects it — confirmed live via `node-cron`'s registered pattern changing on save, not just the stored value.
 
 ---
 
@@ -364,17 +365,39 @@ Set up the project shell.
 
 ---
 
+## Phase 10 — Auth + Deploy Readiness
+
+### 26 Single-user Auth
+
+**Added 2026-08-30** — `architecture.md`'s Authentication section already anticipated "the web dashboard is protected by a single login," but no feature ever built it: every `/api/*` route (DMs, contracts, rates, calendar) has been unauthenticated for the whole build. Its own feature, not folded into Settings — placed last, deliberately, since it's a cross-cutting gate rather than a panel, and building it earlier would add a login step to every dev iteration while the rest of the plan is still running on mock data. It belongs right before real accounts/documents connect, per `AGENTS.md`'s "mock data until production" rule — the last gate before that switch, not the first.
+
+**Logic + UI:**
+
+- `POST /api/auth/login` — zod-validated `{ password }`, compared against a new `DASHBOARD_PASSWORD` env var via `crypto.timingSafeEqual` (same trust tier as `WHATSAPP_TOKEN`/`GEMINI_API_KEY` — env only, never the DB, never the frontend). On match, sets an httpOnly, `sameSite: lax`, `secure`-in-production cookie holding an HMAC-signed session token (payload + expiry) signed with a new `SESSION_SECRET` env var, using Node's built-in `crypto` — no new dependency, no session store, no sessions collection.
+- `POST /api/auth/logout` — clears the cookie.
+- `GET /api/auth/status` — lets the client check auth state on load.
+- `requireAuth` middleware mounted on the Express app for every `/api/*` route **except** `/api/whatsapp` (keeps its own separate Meta signature verification, untouched) and `/api/auth/*` itself. Unauthenticated → `401` in the standard `{ success: false, error }` wrapper.
+- Client: `App.tsx` checks `/api/auth/status` before rendering the router; unauthenticated renders a styled `LoginPage` (single password field, matching the existing design tokens) instead of the sidebar shell. Password never touches `localStorage`/JS-readable storage — the cookie is httpOnly.
+- `GET /api/contracts/:id/pdf` rides under the same gate automatically — the one other place besides the dashboard itself that exposes her private data by URL.
+- **Edge/hosting-level protection considered and rejected** (2026-08-30 developer decision): untestable until a host is chosen, sits outside this codebase, and needs a path-based carve-out for the WhatsApp webhook to keep working — extra deployment risk this approach avoids entirely.
+- **HTTP Basic Auth considered and rejected**: less code (no login page, no cookie logic), but a worse fit for a dashboard she's meant to use daily — no styled login screen, awkward logout. The cookie approach isn't meaningfully more code and adds zero new dependencies either way.
+
+**Verify:** hitting any `/api/*` route (except `/api/whatsapp`) unauthenticated returns `401`; logging in through the dashboard grants access and persists across a reload; logging out revokes it; the WhatsApp webhook continues to pass Meta's signature check untouched.
+
+---
+
 ## Feature Count
 
-| Phase                       | Features |
-| --------------------------- | -------- |
-| Phase 1 — Foundation        | 4        |
-| Phase 2 — WhatsApp          | 1        |
-| Phase 3 — Trends            | 4        |
-| Phase 4 — Content           | 2        |
-| Phase 5 — Calendar          | 3        |
-| Phase 6 — DMs               | 3        |
-| Phase 7 — Contracts (RAG)   | 4        |
-| Phase 8 — Morning Briefing  | 2        |
-| Phase 9 — Settings + Polish | 2        |
-| **Total**                   | **25**   |
+| Phase                              | Features |
+| ----------------------------------- | -------- |
+| Phase 1 — Foundation                | 4        |
+| Phase 2 — WhatsApp                  | 1        |
+| Phase 3 — Trends                    | 4        |
+| Phase 4 — Content                   | 2        |
+| Phase 5 — Calendar                  | 3        |
+| Phase 6 — DMs                       | 3        |
+| Phase 7 — Contracts (RAG)           | 4        |
+| Phase 8 — Morning Briefing          | 2        |
+| Phase 9 — Settings + Polish         | 2        |
+| Phase 10 — Auth + Deploy Readiness  | 1        |
+| **Total**                           | **26**   |

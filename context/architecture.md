@@ -65,7 +65,8 @@ Both surfaces hit the same REST endpoints. The same orchestrator runs regardless
 │   │   ├── calendar.ts                → GET /api/calendar, POST /api/calendar/propose
 │   │   ├── dms.ts                     → GET /api/dms, POST /api/dms/draft-reply
 │   │   ├── contracts.ts               → POST /api/contracts/draft, GET /api/contracts
-│   │   └── documents.ts               → GET/POST /api/documents, DELETE /api/documents/:source
+│   │   ├── documents.ts               → GET/POST /api/documents, DELETE /api/documents/:source
+│   │   └── settings.ts                → GET/POST /api/settings — briefing time, reminders, connected-accounts status
 │   │
 │   ├── agents/                        → LangGraph graph — the brain
 │   │   ├── graph.ts                   → Graph definition, nodes + edges
@@ -300,6 +301,7 @@ Single document — Sofia's info and preferences.
 | style_notes      | string   | Tone + content style for scripts            |
 | briefing_time    | string   | Local time for morning briefing, e.g. 08:00 |
 | timezone         | string   | IANA tz, e.g. "Europe/Rome"                 |
+| reminders        | object   | Optional. `{ events, scripts, contracts, dms: boolean }` — which content categories the daily briefing includes (feature 24). Missing on a legacy profile → every category defaults to `true`. |
 | created_at       | Date     |                                             |
 | updated_at       | Date     |                                             |
 

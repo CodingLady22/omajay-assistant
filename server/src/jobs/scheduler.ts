@@ -1,4 +1,5 @@
 import cron from "node-cron";
+import type { ScheduledTask } from "node-cron";
 import { getProfile } from "@/db/profile";
 import { runDailyTrendsScan } from "@/jobs/daily-trends";
 import { runMorningBriefing } from "@/jobs/morning-briefing";
@@ -46,6 +47,19 @@ async function loadSchedulingProfile(): Promise<Profile | null> {
   }
 }
 
+// Holds the currently-scheduled briefing task so a settings change can
+// replace it live — otherwise a new profile.briefing_time would only take
+// effect on the next server restart, since cron.schedule() fixes its
+// expression at call time.
+let briefingTask: ScheduledTask | undefined;
+
+function scheduleBriefing(time: string | undefined, timezone: string): void {
+  briefingTask?.destroy();
+  const briefingCron = briefingCronFromTime(time);
+  briefingTask = cron.schedule(briefingCron, runMorningBriefing, { timezone });
+  logger.info("jobs/scheduler", `Morning briefing registered — ${briefingCron} (${timezone})`);
+}
+
 export async function registerJobs(): Promise<void> {
   const profile = await loadSchedulingProfile();
   const timezone = profile?.timezone ?? DEFAULT_TIMEZONE;
@@ -56,7 +70,11 @@ export async function registerJobs(): Promise<void> {
   cron.schedule(SCAN_CRON, runDailyTrendsScan, { timezone });
   logger.info("jobs/scheduler", `Daily trends scan registered — ${SCAN_CRON} (${timezone})`);
 
-  const briefingCron = briefingCronFromTime(profile?.briefing_time);
-  cron.schedule(briefingCron, runMorningBriefing, { timezone });
-  logger.info("jobs/scheduler", `Morning briefing registered — ${briefingCron} (${timezone})`);
+  scheduleBriefing(profile?.briefing_time, timezone);
+}
+
+// Called by routes/settings.ts after persisting a new briefing_time — swaps
+// the live cron task instead of requiring a restart to take effect.
+export function rescheduleBriefing(time: string, timezone: string): void {
+  scheduleBriefing(time, timezone);
 }
