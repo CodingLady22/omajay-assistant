@@ -61,7 +61,7 @@ export function UploadDocumentForm({ onUploaded }: Props) {
           // event.target.value can only ever actually be a DocType.
           onChange={(event) => setDocType(event.target.value as DocType)}
           disabled={isSubmitting}
-          className="rounded-md border-[0.5px] border-border bg-surface px-2 py-1.5 text-[12px] text-text-primary"
+          className="rounded-md border-[0.5px] border-border bg-surface px-3 py-2 text-[12px] text-text-primary focus:border-pink-mid"
         >
           {DOC_TYPE_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>

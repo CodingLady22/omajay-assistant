@@ -86,39 +86,47 @@ function normalizeEvent(raw: z.infer<typeof googleEventSchema>): GoogleCalendarE
   };
 }
 
+// Deliberately does NOT catch-and-degrade to [] the way most services in this
+// codebase do (youtube.ts, instagram.ts stub) — an auth/network failure here
+// is indistinguishable from "genuinely nothing on the calendar" once degraded
+// to an empty array, and every caller already has (or reuses) a correct,
+// friendly "couldn't reach your calendar" message one level up:
+// calendarAgent()'s calendar_read catch, routes/calendar.ts's GET / catch,
+// and briefing-agent.ts's gatherTodayEvents(), which independently wraps this
+// call so one failing source still can't blank the rest of the briefing.
+// Found live during feature 25's error-handling audit: with the old
+// catch-and-degrade behavior, a forced auth failure made calendarAgent()
+// answer "You don't have anything on your calendar for the next two weeks"
+// — a false claim, not a friendly degradation. Same reasoning as
+// createEvent() below.
 export async function listUpcomingEvents(days: number = DEFAULT_DAYS): Promise<GoogleCalendarEvent[]> {
-  try {
-    const { GOOGLE_CALENDAR_CREDENTIALS, GOOGLE_CALENDAR_ID } = getGoogleCalendarEnv();
-    const credentials = loadServiceAccountCredentials(GOOGLE_CALENDAR_CREDENTIALS);
-    const auth = new google.auth.GoogleAuth({ credentials, scopes: SCOPES });
-    const calendar = google.calendar({ version: "v3", auth });
+  const { GOOGLE_CALENDAR_CREDENTIALS, GOOGLE_CALENDAR_ID } = getGoogleCalendarEnv();
+  const credentials = loadServiceAccountCredentials(GOOGLE_CALENDAR_CREDENTIALS);
+  const auth = new google.auth.GoogleAuth({ credentials, scopes: SCOPES });
+  const calendar = google.calendar({ version: "v3", auth });
 
-    const timeMin = new Date();
-    const timeMax = new Date(timeMin.getTime() + days * 24 * 60 * 60 * 1000);
+  const timeMin = new Date();
+  const timeMax = new Date(timeMin.getTime() + days * 24 * 60 * 60 * 1000);
 
-    const res = await calendar.events.list({
-      calendarId: GOOGLE_CALENDAR_ID,
-      timeMin: timeMin.toISOString(),
-      timeMax: timeMax.toISOString(),
-      singleEvents: true,
-      orderBy: "startTime",
-      maxResults: MAX_EVENTS,
-    });
+  const res = await calendar.events.list({
+    calendarId: GOOGLE_CALENDAR_ID,
+    timeMin: timeMin.toISOString(),
+    timeMax: timeMax.toISOString(),
+    singleEvents: true,
+    orderBy: "startTime",
+    maxResults: MAX_EVENTS,
+  });
 
-    const events: GoogleCalendarEvent[] = [];
-    for (const item of res.data.items ?? []) {
-      const parsed = googleEventSchema.safeParse(item);
-      if (!parsed.success) {
-        logger.warn("services/google-calendar", `Skipping malformed event ${item.id ?? "unknown"}`);
-        continue;
-      }
-      events.push(normalizeEvent(parsed.data));
+  const events: GoogleCalendarEvent[] = [];
+  for (const item of res.data.items ?? []) {
+    const parsed = googleEventSchema.safeParse(item);
+    if (!parsed.success) {
+      logger.warn("services/google-calendar", `Skipping malformed event ${item.id ?? "unknown"}`);
+      continue;
     }
-    return events;
-  } catch (error) {
-    logger.error("services/google-calendar", "Failed to list events", error);
-    return [];
+    events.push(normalizeEvent(parsed.data));
   }
+  return events;
 }
 
 // Deliberately does NOT catch-and-degrade like listUpcomingEvents() above —
