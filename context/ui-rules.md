@@ -123,6 +123,12 @@ Every panel that can be empty needs a minimal empty state: short muted text, opt
 
 ---
 
+## Disabled Controls
+
+A disabled control (e.g. `CalendarGrid`'s prev/next chevrons) renders bare — `disabled` + the standard `disabled:opacity-40`-family classes, no `title` or tooltip explaining why. Confirmed project-wide during feature 25: every disabled state in the app (chevrons, `Chip`'s `disabled:*` classes) already follows this, so a self-explaining-disabled-control pattern is deliberately not used. If a future control's disabled reason is genuinely non-obvious from context, surface it as visible text near the control instead of a hover-only tooltip.
+
+---
+
 ## Tailwind v4 Note
 
 Tokens live in `@theme` in `index.css` — no `tailwind.config.ts`. Add new tokens to `@theme`, never to a config file.
