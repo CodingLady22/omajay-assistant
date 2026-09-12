@@ -50,6 +50,14 @@ export type CarouselScript = ScriptCommon & {
 // as it arrives over JSON — same discriminated-union shape, _id/created_at as strings.
 export type Script = ReelScript | CaptionScript | CarouselScript;
 
+// Mirrors server/src/types/index.ts's `ScriptDraft` — the editable subset of a
+// reel/caption script, no `_id`/`status`/`created_at`. This is the working copy
+// shape sent to and returned from the revise/save routes (see ChatPanel.tsx's
+// script-editing mode). carousel is excluded — nothing generates that kind yet.
+export type ReelScriptDraft = { kind: "reel" } & Pick<ReelScript, "title" | "hook" | "body" | "cta" | "hashtags">;
+export type CaptionScriptDraft = { kind: "caption" } & Pick<CaptionScript, "title" | "variants" | "hashtags">;
+export type ScriptDraft = ReelScriptDraft | CaptionScriptDraft;
+
 export type EventColor = "pink" | "coral" | "success" | "info";
 
 // Mirrors server/src/types/index.ts's `CalendarEventView` (GET /api/calendar's

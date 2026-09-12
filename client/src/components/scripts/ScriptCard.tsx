@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ReactElement } from "react";
+import { useNavigate } from "react-router-dom";
 import { useChatPrompt } from "@/lib/useChatPrompt";
 import { setScriptStatus } from "@/lib/api";
 import type { Script, ScriptStatus } from "@/lib/types";
@@ -78,9 +79,19 @@ function renderBody(script: Script): ReactElement | null {
 
 export function ScriptCard({ script, onChange }: Props) {
   const goToChat = useChatPrompt();
+  const navigate = useNavigate();
   const action = actionFor(script);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Carries the whole script (not just a prompt string) — a richer payload
+  // than useChatPrompt handles, so this is a separate small navigate call
+  // rather than extending that hook. ChatPanel reads `editScript` from
+  // location.state to enter its locked script-editing mode.
+  function goToEdit(): void {
+    if (!script._id) return;
+    navigate("/", { state: { editScript: script } });
+  }
 
   const nextStatus: ScriptStatus = script.status === "draft" ? "posted" : "draft";
   const toggleLabel = script.status === "draft" ? "Mark posted" : "Mark as draft";
@@ -119,6 +130,7 @@ export function ScriptCard({ script, onChange }: Props) {
       </div>
       {renderBody(script)}
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+        {script.kind !== "carousel" && <Chip onClick={goToEdit}>Edit ✎</Chip>}
         <Chip onClick={() => goToChat(action.prompt)}>{action.label}</Chip>
         <Chip onClick={handleToggleStatus} disabled={isSubmitting}>
           {toggleLabel}

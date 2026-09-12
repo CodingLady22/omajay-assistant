@@ -18,7 +18,7 @@ export function MessageBubble({ role, text }: Props) {
         {isUser ? "SC" : "✦"}
       </div>
       <div
-        className={`max-w-[75%] rounded-[14px] px-3.5 py-2.5 text-[13px] leading-[1.55] ${
+        className={`max-w-[75%] whitespace-pre-line rounded-[14px] px-3.5 py-2.5 text-[13px] leading-[1.55] ${
           isUser
             ? "rounded-br-[4px] bg-pink-light text-pink-dark"
             : "rounded-bl-[4px] bg-surface-secondary text-text-primary"

@@ -126,6 +126,15 @@ export type CarouselScriptDoc = ScriptCommon & {
 
 export type ScriptDoc = ReelScriptDoc | CaptionScriptDoc | CarouselScriptDoc;
 
+// The editable subset of a reel/caption script — no `_id`/`status`/`created_at`,
+// since a draft is either brand new (generation) or an in-progress edit whose
+// identity/status live on the original ScriptDoc, untouched until save. Used
+// by both the chat-editing revise loop and the save route's request body.
+// carousel is excluded — content-agent never generates that kind (feature 11).
+export type ReelScriptDraft = { kind: "reel" } & Pick<ReelScriptDoc, "title" | "hook" | "body" | "cta" | "hashtags">;
+export type CaptionScriptDraft = { kind: "caption" } & Pick<CaptionScriptDoc, "title" | "variants" | "hashtags">;
+export type ScriptDraft = ReelScriptDraft | CaptionScriptDraft;
+
 export type Dm = {
   _id?: ObjectId;
   ig_thread_id: string;

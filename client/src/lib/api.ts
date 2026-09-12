@@ -6,6 +6,7 @@ import type {
   DocType,
   DocumentSummary,
   Script,
+  ScriptDraft,
   ScriptStatus,
   Settings,
   Trend,
@@ -49,6 +50,24 @@ export async function setScriptStatus(id: string, status: ScriptStatus): Promise
   return request(`/api/scripts/${id}/status`, {
     method: "POST",
     body: JSON.stringify({ status }),
+  });
+}
+
+export async function reviseScript(
+  id: string,
+  currentDraft: ScriptDraft,
+  instruction: string
+): Promise<ApiResponse<ScriptDraft>> {
+  return request(`/api/scripts/${id}/revise`, {
+    method: "POST",
+    body: JSON.stringify({ currentDraft, instruction }),
+  });
+}
+
+export async function saveScript(id: string, draft: ScriptDraft): Promise<ApiResponse<Script>> {
+  return request(`/api/scripts/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(draft),
   });
 }
 
