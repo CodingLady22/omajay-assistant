@@ -36,20 +36,26 @@ async function classifyKind(message: string): Promise<ScriptKind> {
   }
 }
 
+// .min(1) on every text field matches routes/scripts.ts's reelDraftSchema
+// exactly — reviseScript() reuses this schema, so an empty field (e.g. she
+// says "remove the CTA") is rejected here, on this turn, rather than being
+// accepted into the working copy and only failing two turns later when the
+// stricter request-body schema refuses it on the next revise/save call.
 const reelGenerationSchema = z.object({
-  title: z.string(),
-  hook: z.string(),
-  body: z.string(),
-  cta: z.string(),
+  title: z.string().min(1),
+  hook: z.string().min(1),
+  body: z.string().min(1),
+  cta: z.string().min(1),
   hashtags: z.array(z.string()),
 });
 
 // The prompt asks for 3 variations — .min(2) is a safe floor, not the exact
 // target: reject a degenerate single-variant response (not really "variations"
 // plural) without failing the whole generation over the model returning 2
-// instead of 3.
+// instead of 3. `title.min(1)` mirrors routes/scripts.ts's captionDraftSchema
+// for the same reason as reelGenerationSchema above.
 const captionGenerationSchema = z.object({
-  title: z.string(),
+  title: z.string().min(1),
   variants: z.array(z.string()).min(2),
   hashtags: z.array(z.string()),
 });
