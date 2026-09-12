@@ -1,53 +1,59 @@
-# Memory — Feature 25: Empty States + Error Handling Pass
+# Memory — Feature 27: Script Chat Editing
 
-Last updated: 2026-09-01
+Last updated: 2026-09-12
 
 ## What was built
 
-**Feature 25, built end to end and shipped — but as an audit-and-fix pass, not new panels.** `/architect` surfaced (before any code was written) that build-plan.md's original scope was already mostly done: every panel (Trends/Scripts/Calendar/Contracts) already had both an empty-state message and a CTA chip from its own originating feature. The developer explicitly sorted the six candidate open-question items into three in-scope, two deferred, one trivial-not-forced — see Decisions below. Real changes made:
+**Feature 27 (new, developer-requested scope — not part of the original 26-feature build-plan, sequenced after 25).** Script generation was previously one-way: a generated script landed in the library as a dead end. This feature makes it conversational — an "Edit" action on a script card opens the chat panel with that script loaded into a locked editing session; she iterates with plain-language instructions across as many turns as she wants; nothing is saved until she explicitly commits.
 
-1. `client/src/components/documents/UploadDocumentForm.tsx` — `<select>` reconciled to `ui-tokens.md`'s documented Input spec (`px-3 py-2 focus:border-pink-mid`, was `px-2 py-1.5` with no focus state).
-2. `client/src/pages/CalendarPage.tsx` — empty-state wrapper got `justify-center` added, matching `ContractsPage`'s identical "nested empty state" family exactly (Trends/Scripts are a separate "whole-page early-return" family and already matched each other).
-3. `context/ui-rules.md` — new "Disabled Controls" section formalizing bare-disabled/no-tooltip as the app-wide rule (matching the existing `CalendarGrid` precedent).
-4. `server/src/services/google-calendar.ts` — **real bug fix**, found only by force-triggering a failure live, not by reading: `listUpcomingEvents()` was catching every failure (including auth errors) and degrading to `[]`. Removed the try/catch entirely (matching the same file's existing `createEvent()` precedent/reasoning). See Problems Solved.
-5. `context/ui-registry.md` / `context/progress-tracker.md` — imprint update + feature ticked off with full decisions recorded.
+Files touched (client/server only — see the PR summary given to the developer this session for the exact list; `context/build-plan.md` and `context/progress-tracker.md` were also updated but aren't code):
 
-No server routes, agents, or types changed. No new dependencies.
+- `server/src/types/index.ts` — added `ReelScriptDraft`/`CaptionScriptDraft`/`ScriptDraft` (the editable subset of a script, no `_id`/`status`/`created_at`).
+- `server/src/agents/content-agent.ts` — added `reviseScript()` (bypasses the orchestrator/graph entirely, reuses/tightened the existing generation zod schemas) and `updateScript()` (commits the final draft).
+- `server/src/routes/scripts.ts` — added `POST /:id/revise` and `PUT /:id`, zod-validated.
+- `client/src/lib/types.ts` / `client/src/lib/api.ts` — mirrored `ScriptDraft` type + `reviseScript()`/`saveScript()` wrappers.
+- `client/src/components/scripts/ScriptCard.tsx` — new "Edit ✎" chip (reel/caption only), navigates to `/` carrying the whole script via router state.
+- `client/src/components/chat/ChatPanel.tsx` — reads `editScript` from router state into locked `editingScript` mode; revise-only send path; Save/Discard handlers.
+- `client/src/components/chat/ScriptEditBanner.tsx` — new component (title + Save/Discard), reuses `EventItem`'s established primary-button/`Chip`/plain-text-error precedents.
+- `client/src/components/chat/MessageBubble.tsx` — added `whitespace-pre-line` so multi-line revised drafts render correctly.
+
+Committed in `f7c3bdd` ("feat: add editing function to the written scripts"). A `/code-review` pass afterward found two real issues (see Problems Solved), fixed with one more round of edits to `content-agent.ts` and `ChatPanel.tsx` — **these fixes are built, type-checked, and live-verified but not yet committed** (see Current state).
 
 ## Decisions made
 
-- **The developer explicitly triaged six candidate follow-up items (from the prior session's open questions) into three buckets before this feature's scope was locked**: in-scope (Atlas index-missing → verify only; `UploadDocumentForm` select → fix; disabled-control tooltip → make the app-wide call now), deliberately deferred (real Google Calendar swap → production cutover; `@langchain/google` pre-1.0 → a watch note, not a task), and trivial-not-forced (`ContractCard`'s download-link className → extract on the third link-chip occurrence, per the existing rule — still open, unchanged).
-- **Empty-state CTA chips needed no new code** — an `/architect`-stage code read found they already existed everywhere a next step makes sense (Trends: "✨ What's trending?", Scripts: "+ Generate new idea ↗", Calendar: "+ Add event ↗", Contracts: "✨ Draft a contract"). Documents' nested list stays chip-less on purpose — the upload form directly above it is the CTA.
-- **Atlas index-missing handling verified, not touched** — `rag/retrieve.ts`'s `ok|empty|index_missing` split and both `contractsAgent()`/`POST /api/contracts/draft`'s distinct friendly messages were already correct (built in feature 20). Explicit developer call: verify-only, no proactive Settings indicator added.
-- **Disabled-control convention locked as bare-disabled, no tooltip** — matches the one existing precedent (`CalendarGrid`'s chevrons) and every other disabled state in the app; no retrofits needed.
-- **`listUpcomingEvents()` now throws instead of degrading to `[]`** — a deliberate, disclosed divergence from `code-standards.md`'s general "services degrade gracefully" rule, justified the same way `createEvent()` in the same file already is: a swallowed failure here is indistinguishable from "genuinely nothing on the calendar," which is a materially worse outcome than a services call degrading a *content-discovery* feature (trends) to "nothing found."
-- **Empty-state markup normalized within two existing "families," not forced into one shared class string** — Trends/Scripts (whole-page replacement) vs. Calendar/Contracts (nested alongside other always-visible content) serve genuinely different layouts; forcing identical markup would fight one of them.
+- **Chat is 100% stateless server-side** (no conversation history, no session store — confirmed by reading the codebase before designing anything) — so the working copy of an in-progress edit lives entirely in `ChatPanel`'s local React state, sent in full (not a delta) on every revise turn. No new DB collection, no server-side session.
+- **No new orchestrator intent, no `AgentState` field, no graph node.** `/revise` calls `reviseScript()` directly, bypassing the orchestrator entirely — the client already knows it's mid-edit for a specific script, so there's nothing to classify. `architecture.md`'s fixed intent set is untouched. Same category of disclosed boundary extension as `routes/trends.ts` → `agents/trends-agent.ts` (feature 08).
+- **Save is a dedicated `PUT /api/scripts/:id` button, never inferred from chat text** — matches the calendar's propose-then-confirm split.
+- **Sidebar-navigation-away discards silently, no confirmation dialog.** `editingScript` lives only inside `ChatPanel` (never lifted to `App.tsx`/a cross-route context), so a route change unmounts it automatically — the default behavior of route-scoped state. Matches `EventItem`'s bare Discard precedent, not `DocumentRow`'s real-data-loss delete (which does use `ConfirmDialog`).
+- **Edit mode fully locks the chat panel** — no interleaving general requests, since there's no mechanism to carry the working copy through an unrelated graph round-trip.
+- **`carousel` stays out of scope** — `content-agent.ts` never generates that kind (feature 11); Edit only renders for `reel`/`caption`.
 
 ## Problems solved
 
-- **Real bug, found by force-triggering rather than reading, per explicit developer instruction not to let "spot-check" reduce to grepping for `try/catch`.** Two throwaway verification scripts (written, run, deleted — never committed) forced the two hardest-to-reach failure paths live:
-  - Voyage AI embedding auth failure mid-contract-draft: already correct. `contractsAgent()` answered "Couldn't draft that contract right now — try again in a moment." — no fix needed.
-  - Google Calendar auth failure mid-read: **broken**. With a corrupted service-account credential, `calendarAgent()`'s `calendar_read` path answered *"You don't have anything on your calendar for the next two weeks"* — a false claim about her real schedule, not a friendly degradation, even though the correct message already existed in `calendarAgent()`'s own catch block and was simply unreachable (the error was swallowed one layer down in `listUpcomingEvents()`).
-  - Fixed by removing `listUpcomingEvents()`'s try/catch. Re-verified live across all three real callers: `calendarAgent()`'s chat path now correctly says "Couldn't reach your calendar right now"; `routes/calendar.ts`'s `GET /` (via `getCalendarView()`) now rejects into its existing generic-500 catch instead of silently returning `200` with an empty list; `briefing-agent.ts`'s `gatherTodayEvents()` still degrades gracefully to just an empty calendar section (it already independently wraps this call), confirmed via a full `buildBriefing()` run under the same forced failure.
-- **Checked trends' equivalent failure mode and found it does NOT need the same fix** — if YouTube fails while Instagram/TikTok stay `[]` stubs, `scanAndStoreTrends()` falls back to stale-but-real stored data, or an honest "couldn't find any trending content" only when nothing has ever been scanned. Not a false claim the way the calendar bug was.
-- **Three safety gates re-confirmed by reading actual call sites, not re-asserted from memory**: `createEvent()` has exactly one caller in the whole codebase (reachable only via the explicit confirm route); `dms-agent.ts` is still the harmless feature-03 stub with zero send capability; no `sendWhatsApp`-equivalent exists anywhere yet — the only delivery path anywhere is the morning-briefing job's own `deliverBriefing()`.
+- **Local dev environment: MongoDB Atlas connection failing with a TLS handshake error** (`MongoServerSelectionError` / SSL alert 80) on every boot-retry. Root cause: the dev machine's public IP rotated off Atlas's IP access list after a power outage. Not a code issue — resolved by the developer updating the Atlas access list. Worth remembering if this recurs after a power/network interruption.
+- **`/code-review` (2026-09-12) caught two real issues in the initial build, both fixed:**
+  1. **Schema mismatch trapping an edit session.** `reviseScript()`'s output schema had no `.min(1)` on text fields, but the request-body schema validating the *next* turn's `currentDraft` already did — so an LLM-produced empty field (e.g. she says "remove the CTA") was silently accepted on turn N, then rejected on turn N+1, trapping the session (could neither revise nor save, only Discard). Fixed by adding matching `.min(1)` constraints to `reelGenerationSchema`/`captionGenerationSchema` in `content-agent.ts`, so an empty field is rejected the same turn it's produced — it never merges into the working copy (`ChatPanel.tsx` only calls `setEditingScript` on success), so the next turn always sends the last-good draft.
+  2. **Stale error banner.** The revise branch of `ChatPanel.tsx`'s `handleSend` never cleared `editError`, so a previous failed-Save error kept showing through subsequent successful revise turns. Fixed with one line (`setEditError(null)` at the top of the `editingScript` branch).
+  - Re-verified live, twice over: a deterministic standalone zod check proving the two schemas now agree; a live Playwright run using `page.route()` to force a real Save failure (proving the stale-error fix) then a successful revise (proving it clears); and the actual "remove the CTA" trap reproduced against the real LLM (Gemini genuinely returned an empty `cta`, server rejected it immediately, session recovered with a normal follow-up revise and a successful Save). Two earlier flaky runs of the same live LLM call were investigated and ruled out as unrelated transient network/parse hiccups before trusting the final clean run.
 
 ## Current state
 
-- Feature 25 fully built, live-verified, `tsc -b --noEmit` clean on both `server/` and `client/`, zero console/page errors across a full Playwright pass of all 6 dashboard routes (real existing data — Velour Cosmetics contract, real scripts/events/documents — not mocked). Ticked in `progress-tracker.md` with full decisions recorded; `ui-registry.md` imprinted.
-- **Not yet committed** — working tree has 6 modified files (see the PR summary below), nothing staged. Developer has not yet said how to split the commits (bug fix vs. doc/UI consistency changes).
-- No dev servers left running; scratch verification scripts and the scratch Playwright directory were cleaned up (one `/c/tmp/pw-feature25` directory may still be lingering due to the same Windows file-lock quirk noted in the prior session's memory — harmless, outside the repo).
+- Feature 27 fully built and live-verified twice (once after initial build, once after the code-review fixes). `tsc -b --noEmit` clean on both `server/` and `client/` as of the latest fix.
+- Bulk of the feature is committed (`f7c3bdd`). **The two code-review fixes are NOT yet committed** — working tree has `content-agent.ts` (schema fix) and `ChatPanel.tsx` (stale-error fix) modified, plus `MessageBubble.tsx` showing modified from IDE auto-formatting only (arbitrary Tailwind values like `rounded-[14px]`/`px-[22px]` canonicalized to `rounded-lg`/`px-5.5` etc. — no functional change), plus `context/progress-tracker.md` updated with full decisions.
+- No dev servers left running. Scratch Playwright verification directories under `/c/tmp` were cleaned up where possible (one or two may linger due to a known Windows file-lock quirk on this machine — harmless, outside the repo, self-clears).
+- `progress-tracker.md` has feature 27 checked off `[x]` in Phase 11, with the full code-review-and-fix story recorded in Decisions.
 
 ## Next session starts with
 
-**Nothing is queued to build next automatically** — Phase 9 is now fully complete (24 and 25 both done). The plan's next numbered item is **Feature 26 — Single-user Auth** (Phase 10), but per the developer's own standing instruction (carried over from the prior session), don't start it without re-confirming the plan is still accurate first — re-read `build-plan.md`'s feature 26 entry and re-`/architect` rather than assuming the env-var/cookie approach agreed on 2026-08-30 is still exactly right.
+Nothing is queued automatically. The plan's next numbered item is still **Feature 26 — Single-user Auth** (Phase 10) — it was skipped over, not superseded, by this developer-requested feature 27. Per the standing instruction carried over multiple sessions now: don't start it without re-confirming the plan is still accurate first (re-read `build-plan.md`'s feature 26 entry and re-`/architect`).
 
-Before that: the developer may want to decide how to commit this session's 6 changed files (ask, don't assume) — the calendar bug fix is arguably worth its own commit separate from the UI-consistency/doc changes, mirroring how feature 24's session split its own out-of-scope fix into a separate commit.
+Before that: the developer should decide how to commit this session's remaining changes (the two code-review fixes + the `MessageBubble.tsx` auto-format + the progress-tracker update) — ask, don't assume, whether these get squashed into a follow-up commit, amended into `f7c3bdd`, or left separate.
 
 ## Open questions
 
-- Whether/how to detect a silently-dropped Atlas Search index proactively — carried over from feature 18/20, still unaddressed (feature 25 confirmed the *reactive* per-draft detection is correct; proactive detection was explicitly decided against for this feature).
-- `@langchain/google` still pre-1.0 (0.2.x) — carried over, explicitly a watch-only note, no action.
-- Whether the dev/test Google Calendar gets swapped for Sofia's real shared calendar before production — carried over, explicitly deferred to the production cutover.
-- Whether `ContractCard`'s duplicated download-link className should be extracted into a shared link-chip component — carried over, explicitly deferred until a third link-chip occurrence appears (per the existing extraction-threshold rule).
-- Feature 22's briefing 14-day recency cap could eventually be replaced with a real `status`-based filter — carried over from feature 23, still a future polish candidate, untouched this session.
+- Whether/how to detect a silently-dropped Atlas Search index proactively — carried over from feature 18/20/25, still unaddressed.
+- `@langchain/google` still pre-1.0 (0.2.x) — carried over, watch-only.
+- Whether the dev/test Google Calendar gets swapped for Sofia's real shared calendar before production — carried over, deferred to the production cutover.
+- Whether `ContractCard`'s duplicated download-link className should be extracted — carried over, deferred until a third occurrence.
+- Feature 22's briefing 14-day recency cap could eventually be replaced with a real `status`-based filter — carried over, still a future polish candidate.
+- No editable-preview UI exists for an in-progress script edit beyond the chat transcript itself (by design, confirmed during this feature's `/architect`) — if that ever feels insufficient in practice, revisit.

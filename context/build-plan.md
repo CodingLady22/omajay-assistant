@@ -386,6 +386,26 @@ Set up the project shell.
 
 ---
 
+---
+
+## Phase 11 — Script Chat Editing
+
+### 27 Script Chat Editing
+
+**Added 2026-09-11, developer-requested — new scope, not part of the original 26-feature plan.** Script generation (feature 11) was one-way: a generated script lands in the library as a dead end, with no way to refine tone, shorten it, or push back. This feature makes it conversational: an "Edit" action on a script card opens the chat with that script loaded into a locked editing session. She iterates with plain-language instructions across as many turns as she wants; nothing in `scripts` changes until she explicitly saves.
+
+**Logic + UI:**
+
+- `ScriptCard` gets an "Edit ✎" chip (reel/caption only — carousel is never generated, feature 11) that navigates to `/` with the whole script carried in router state (`{ state: { editScript: script } }`), a richer payload than `useChatPrompt`'s plain-string prefill.
+- `ChatPanel` reads `editScript` into local `editingScript` state and locks: `QuickChips` and the general `/api/chat` path are replaced by an editing banner (title + Save/Discard) and a revise-only send path, until Save or Discard.
+- Each turn sends the *entire current working draft* (not a delta) to `POST /api/scripts/:id/revise`, which calls a new `reviseScript()` in `content-agent.ts` directly — **no orchestrator involvement, no new intent, no `AgentState` change.** The fixed intent set in `architecture.md` stays untouched; this bypasses the graph entirely, the same kind of disclosed boundary extension as `routes/trends.ts` → `agents/trends-agent.ts`.
+- Save is an explicit button (`PUT /api/scripts/:id`, new `updateScript()`), never inferred from chat text — matches the calendar's propose-then-confirm split.
+- Discard, or leaving the chat route by any means (sidebar nav, reload, tab close), drops the whole in-progress edit — the working copy lives only in `ChatPanel`'s local React state, which the router destroys on unmount. No new DB collection, no server-side session, no confirmation dialog (same category as `EventItem`'s bare Discard, not `DocumentRow`'s real-data-loss delete).
+
+**Verify:** open a real reel script, click Edit, land on `/` locked in edit mode with its title in the banner; send two successive instructions and confirm each revises the *latest* draft (not the original) with nothing written to Mongo yet; Save and confirm the same `_id` is updated in place; repeat and Discard instead — original untouched; repeat once more and click a sidebar item mid-edit instead of Save/Discard — original untouched, no residual edit-mode state on return.
+
+---
+
 ## Feature Count
 
 | Phase                              | Features |
@@ -400,4 +420,5 @@ Set up the project shell.
 | Phase 8 — Morning Briefing          | 2        |
 | Phase 9 — Settings + Polish         | 2        |
 | Phase 10 — Auth + Deploy Readiness  | 1        |
-| **Total**                           | **26**   |
+| Phase 11 — Script Chat Editing      | 1        |
+| **Total**                           | **27**   |

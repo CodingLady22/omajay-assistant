@@ -7,7 +7,7 @@ import { llm } from "@/lib/llm";
 import { logger } from "@/lib/logger";
 import { extractJson } from "@/lib/utils";
 import type { AgentState } from "@/agents/state";
-import type { CaptionScriptDoc, Profile, ReelScriptDoc, ScriptDoc, ScriptStatus } from "@/types";
+import type { CaptionScriptDoc, Profile, ReelScriptDoc, ScriptDoc, ScriptDraft, ScriptStatus } from "@/types";
 
 const SCRIPT_TEMPERATURE = 0.7;
 
@@ -36,20 +36,26 @@ async function classifyKind(message: string): Promise<ScriptKind> {
   }
 }
 
+// .min(1) on every text field matches routes/scripts.ts's reelDraftSchema
+// exactly — reviseScript() reuses this schema, so an empty field (e.g. she
+// says "remove the CTA") is rejected here, on this turn, rather than being
+// accepted into the working copy and only failing two turns later when the
+// stricter request-body schema refuses it on the next revise/save call.
 const reelGenerationSchema = z.object({
-  title: z.string(),
-  hook: z.string(),
-  body: z.string(),
-  cta: z.string(),
+  title: z.string().min(1),
+  hook: z.string().min(1),
+  body: z.string().min(1),
+  cta: z.string().min(1),
   hashtags: z.array(z.string()),
 });
 
 // The prompt asks for 3 variations — .min(2) is a safe floor, not the exact
 // target: reject a degenerate single-variant response (not really "variations"
 // plural) without failing the whole generation over the model returning 2
-// instead of 3.
+// instead of 3. `title.min(1)` mirrors routes/scripts.ts's captionDraftSchema
+// for the same reason as reelGenerationSchema above.
 const captionGenerationSchema = z.object({
-  title: z.string(),
+  title: z.string().min(1),
   variants: z.array(z.string()).min(2),
   hashtags: z.array(z.string()),
 });
@@ -94,6 +100,59 @@ async function generateCaption(message: string, profile: Profile | null): Promis
   return captionGenerationSchema.parse(JSON.parse(extractJson(raw)));
 }
 
+function buildRevisePrompt(draft: ScriptDraft, instruction: string, profile: Profile | null): string {
+  const niche = profile?.niche ?? DEFAULT_TOPIC;
+  const voice = profile?.style_notes ? ` Her voice/style: ${profile.style_notes}.` : "";
+
+  if (draft.kind === "reel") {
+    return `You are revising an existing Reel script for a ${niche} content creator.${voice}
+Current script:
+Title: ${draft.title}
+Hook (0-3s): ${draft.hook}
+Body: ${draft.body}
+CTA: ${draft.cta}
+Hashtags: ${draft.hashtags.join(", ")}
+
+Her instruction: "${instruction}"
+
+Apply her instruction and return the FULL revised script, not just the changed part. Keep everything else as close to the original as her instruction allows.
+
+Respond with ONLY a JSON object, no markdown, no explanation, in this exact shape:
+{"title": "...", "hook": "...", "body": "...", "cta": "...", "hashtags": ["...", "..."]}`;
+  }
+
+  return `You are revising an existing set of Instagram caption variations for a ${niche} content creator.${voice}
+Current captions:
+Title: ${draft.title}
+${draft.variants.map((variant, index) => `Option ${index + 1}: ${variant}`).join("\n")}
+Hashtags: ${draft.hashtags.join(", ")}
+
+Her instruction: "${instruction}"
+
+Apply her instruction to every variation and return the FULL revised set — the same number of variants, not just the changed part.
+
+Respond with ONLY a JSON object, no markdown, no explanation, in this exact shape:
+{"title": "...", "variants": ["...", "...", "..."], "hashtags": ["...", "..."]}`;
+}
+
+// Bypasses the orchestrator/graph entirely — the client already knows it's
+// mid-edit-session for a specific script (see ChatPanel.tsx), so there's
+// nothing to classify. No AgentState involvement, no new intent. The route
+// (routes/scripts.ts) wraps this in its own try/catch, same as
+// generateReel/generateCaption rely on contentAgent()'s catch.
+export async function reviseScript(draft: ScriptDraft, instruction: string): Promise<ScriptDraft> {
+  const profile = await getProfile();
+  const prompt = buildRevisePrompt(draft, instruction, profile);
+  const result = await llm.invoke([{ role: "user", content: prompt }], { temperature: SCRIPT_TEMPERATURE });
+  const raw = typeof result.content === "string" ? result.content : String(result.content);
+  const parsed = JSON.parse(extractJson(raw));
+
+  if (draft.kind === "reel") {
+    return { kind: "reel", ...reelGenerationSchema.parse(parsed) };
+  }
+  return { kind: "caption", ...captionGenerationSchema.parse(parsed) };
+}
+
 function buildConfirmation(kind: ScriptKind, title: string): string {
   const label = kind === "reel" ? "Reel script" : "caption";
   return `Here's your ${label}: "${title}" — saved to your scripts library. ✨`;
@@ -113,6 +172,24 @@ export async function setScriptStatus(id: string, status: ScriptStatus): Promise
   const updated = await collections
     .scripts()
     .findOneAndUpdate({ _id: new ObjectId(id) }, { $set: { status } }, { returnDocument: "after" });
+  return updated ?? null;
+}
+
+// Commits an edit session's final working copy — called only from the Save
+// button (PUT /api/scripts/:id), never inferred from chat text, mirroring the
+// calendar's propose-then-confirm split (the revise loop never has commit
+// authority on its own). Updates the original document in place; `kind` isn't
+// part of the $set, so the stored doc's kind can never drift even if a stale
+// draft were somehow submitted.
+export async function updateScript(id: string, draft: ScriptDraft): Promise<ScriptDoc | null> {
+  const fields =
+    draft.kind === "reel"
+      ? { title: draft.title, hook: draft.hook, body: draft.body, cta: draft.cta, hashtags: draft.hashtags }
+      : { title: draft.title, variants: draft.variants, hashtags: draft.hashtags };
+
+  const updated = await collections
+    .scripts()
+    .findOneAndUpdate({ _id: new ObjectId(id) }, { $set: fields }, { returnDocument: "after" });
   return updated ?? null;
 }
 
