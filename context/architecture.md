@@ -57,7 +57,10 @@ Both surfaces hit the same REST endpoints. The same orchestrator runs regardless
 │
 ├── server/                            → Node.js + Express backend
 │   ├── index.ts                       → Express app entry, route mounting
+│   ├── middleware/
+│   │   └── requireAuth.ts             → Gates /api/* on a valid session cookie (feature 26)
 │   ├── routes/
+│   │   ├── auth.ts                    → POST /api/auth/login, /logout, GET /status — unauthenticated
 │   │   ├── chat.ts                    → POST /api/chat — main agent entry
 │   │   ├── whatsapp.ts                → WhatsApp webhook (verify + receive)
 │   │   ├── trends.ts                  → GET /api/trends
@@ -110,6 +113,7 @@ Both surfaces hit the same REST endpoints. The same orchestrator runs regardless
 │   │   ├── llm.ts                     → LLM client (Gemini for now) — single source of model config
 │   │   ├── logger.ts                  → Structured logging
 │   │   ├── env.ts                     → zod-validated env loading
+│   │   ├── session.ts                 → Session cookie create/verify + password check (feature 26)
 │   │   └── utils.ts                   → Shared helpers + constants
 │   │
 │   └── types/
@@ -149,6 +153,7 @@ Both surfaces hit the same REST endpoints. The same orchestrator runs regardless
     │   │       ├── Chip.tsx
     │   │       └── ConfirmDialog.tsx
     │   └── pages/
+    │       ├── LoginPage.tsx           → Password gate, rendered instead of the shell when unauthenticated (feature 26)
     │       ├── ChatPage.tsx
     │       ├── TrendsPage.tsx
     │       ├── ScriptsPage.tsx
@@ -165,6 +170,7 @@ Both surfaces hit the same REST endpoints. The same orchestrator runs regardless
 
 | Folder            | Owns                                                                              |
 | ----------------- | --------------------------------------------------------------------------------- |
+| `server/middleware/` | Cross-cutting Express gating only (e.g. `requireAuth`) — no business logic, no agent/service calls. |
 | `server/routes/`  | HTTP only — parse request, call a node or service, shape the response. No logic.   |
 | `server/agents/`  | All agent reasoning. Never imports from `routes/`, `services/` clients call out.   |
 | `server/services/`| Third-party API wrappers only. No agent reasoning, no DB writes beyond caching.    |
@@ -462,9 +468,11 @@ Retrieve (per contract request):
 
 ## Authentication
 
-This is a single-user personal assistant. The web dashboard is protected by a single login (Sofia's). The WhatsApp webhook is protected by Meta's signature verification — every inbound webhook call must pass signature check before processing. No multi-user auth, no OAuth provider login for end users.
+This is a single-user personal assistant. The web dashboard is protected by a single shared password (feature 26), not per-user accounts. The WhatsApp webhook is protected by Meta's signature verification — every inbound webhook call must pass signature check before processing. No multi-user auth, no OAuth provider login for end users.
 
-The third-party connections (Instagram, WhatsApp, Google Calendar, YouTube) authenticate **server-side** using tokens the client provides. Those tokens live in env vars, never in the database, never in the frontend.
+**Dashboard login (feature 26):** `POST /api/auth/login` compares the submitted password against `DASHBOARD_PASSWORD` (HMAC-then-`timingSafeEqual`, never a raw compare) and, on match, sets an httpOnly, `sameSite: lax`, `secure`-in-production cookie holding a self-verifying token — `base64url(payload).hmacSignature`, signed with `SESSION_SECRET` via Node's built-in `crypto`. No session store, no DB collection; the cookie itself is the session, valid 7 days. `requireAuth` (`server/middleware/requireAuth.ts`) is mounted on `/api` for every route except `/api/auth/*` (login/logout/status must be reachable before authentication) and `/api/whatsapp` (once built — keeps its own separate Meta signature check). An unauthenticated request gets `401` in the standard `{ success: false, error }` wrapper. `POST /api/auth/login` is throttled in-memory per IP (5 failed attempts / 15 minutes) — not persisted, resets on restart. The client (`App.tsx`) checks `GET /api/auth/status` before rendering the router; unauthenticated renders `LoginPage` instead of the sidebar shell. `GET /api/contracts/:id/pdf` rides under the same gate automatically, since it's mounted under `/api`.
+
+The third-party connections (Instagram, WhatsApp, Google Calendar, YouTube) authenticate **server-side** using tokens the client provides. Those tokens live in env vars, never in the database, never in the frontend. `DASHBOARD_PASSWORD` and `SESSION_SECRET` are the same trust tier — env only, part of the eager/core schema since they now gate the whole app.
 
 ---
 

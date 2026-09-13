@@ -1,4 +1,5 @@
 import type {
+  AuthStatus,
   BriefingReminders,
   CalendarEvent,
   Contract,
@@ -29,6 +30,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<ApiResponse
     console.error("[lib/api]", error);
     return { success: false, error: "Couldn't reach the server — try again in a moment." };
   }
+}
+
+export async function getAuthStatus(): Promise<ApiResponse<AuthStatus>> {
+  return request("/api/auth/status");
+}
+
+export async function login(password: string): Promise<ApiResponse<AuthStatus>> {
+  return request("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ password }),
+  });
+}
+
+export async function logout(): Promise<ApiResponse<AuthStatus>> {
+  return request("/api/auth/logout", { method: "POST" });
 }
 
 export async function sendChatMessage(text: string): Promise<ApiResponse<{ response: string }>> {

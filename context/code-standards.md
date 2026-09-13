@@ -310,6 +310,8 @@ Both paths go through the same `parseEnv` / `lazyEnv` helpers in `lib/env.ts` â€
 | ----------------------------- | --------------- | ------------------------------ |
 | `PORT`                        | core            | lib/env.ts                    |
 | `MONGODB_URI`                 | core            | db/client.ts                  |
+| `DASHBOARD_PASSWORD`          | core            | lib/session.ts (routes/auth.ts) |
+| `SESSION_SECRET`              | core            | lib/session.ts                |
 | `GEMINI_API_KEY`              | llm (lazy)      | lib/llm.ts                    |
 | `WHATSAPP_TOKEN`              | whatsapp (lazy) | services/whatsapp.ts          |
 | `WHATSAPP_PHONE_ID`           | whatsapp (lazy) | services/whatsapp.ts          |

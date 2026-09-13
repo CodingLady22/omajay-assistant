@@ -1,3 +1,8 @@
+// GET /api/auth/status, and the response of a successful login/logout.
+export type AuthStatus = {
+  authenticated: boolean;
+};
+
 export type TrendPlatform = "instagram" | "youtube" | "tiktok";
 
 // Mirrors server/src/types/index.ts's `Trend` (the `trends` collection schema)
