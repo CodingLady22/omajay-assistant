@@ -1,6 +1,6 @@
 # Memory — Feature 26: Single-user Auth
 
-Last updated: 2026-09-13
+Last updated: 2026-09-15
 
 ## What was built
 
@@ -22,7 +22,7 @@ Client:
 
 Docs updated: `architecture.md` (folder tree, System Boundaries row for `server/middleware/`, Authentication section rewritten to describe the real mechanism), `code-standards.md` (env var table), `build-plan.md` (addendum noting the throttle + logout-placement decisions beyond the original spec), `progress-tracker.md` (feature 26 ticked off, full decisions recorded).
 
-Not yet committed — working tree has all of the above staged as uncommitted changes on the `auth` branch.
+Committed and pushed to `origin/auth` in two commits: `e6e56c7` ("feat: Add single-user authentication" — the initial build) and `4aabe7a` ("fix: resolve issues found in code-review" — the 5 review fixes below).
 
 ## Decisions made
 
@@ -46,11 +46,11 @@ Not yet committed — working tree has all of the above staged as uncommitted ch
 - Full flow re-verified live end-to-end after all fixes: unauthenticated `401`s, login → cookie → protected routes succeed, wrong password `401`, 5-attempt throttle → `429` (including correct password mid-lockout), logout → re-locks, malformed cookie degrades cleanly instead of crashing, expired-session redirect works, logout icon visible at all three breakpoints (1280/800/375px, screenshotted). `tsc -b --noEmit` clean on both `server/` and `client/` after the fixes.
 - No dev servers left running — confirmed via `netstat` + `taskkill //PID <pid> //F` (this machine's `pkill -f` still doesn't reliably kill `tsx watch`/`vite` child processes — see Problems solved, this bit the review-verification pass a second time before I remembered to check `netstat` directly).
 - Confirmed earlier this session (still true, not stale): the feature 27 code-review fixes are committed (`41457a1`), along with a `refineScript` PR merge (`0872df7`). No loose ends from feature 27 remain.
-- Working tree has all of feature 26's changes (initial build + the 5 review fixes) uncommitted on the `auth` branch, plus `MessageBubble.tsx`/`Sidebar.tsx` showing minor IDE auto-format diffs (arbitrary Tailwind values canonicalized — no functional change).
+- Working tree is clean — feature 26 (initial build + the 5 review fixes) is fully committed (`e6e56c7`, `4aabe7a`) and pushed to `origin/auth`. `git status` confirms nothing outstanding.
 
 ## Next session starts with
 
-Feature 26 is done — reviewed, fixed, re-verified. Ask the developer how they want to commit (all of feature 26 including the review fixes in one commit, or split the initial build from the review-fix round). After that: all 27 planned/inserted features are shipped, so the next real work is either the three recorded-but-deferred follow-ups (briefing status-based filter as its own small feature; `ContractCard`'s link-chip extraction, still waiting on a third occurrence; the production cutover bundling WhatsApp/Instagram/Google Calendar, now also carrying the two deferred auth hardening items — `trust proxy` config and `requireAuth`'s explicit allowlist) or new developer-directed scope.
+Feature 26 is done and pushed — reviewed, fixed, re-verified, committed. The `auth` branch is ready for a PR into `main` (developer to decide when/whether to open it — not opened by this session). After that: all 27 planned/inserted features are shipped, so the next real work is either the three recorded-but-deferred follow-ups (briefing status-based filter as its own small feature; `ContractCard`'s link-chip extraction, still waiting on a third occurrence; the production cutover bundling WhatsApp/Instagram/Google Calendar, now also carrying the two deferred auth hardening items — `trust proxy` config and `requireAuth`'s explicit allowlist) or new developer-directed scope.
 
 ## Open questions
 
