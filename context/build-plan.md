@@ -384,6 +384,8 @@ Set up the project shell.
 
 **Verify:** hitting any `/api/*` route (except `/api/whatsapp`) unauthenticated returns `401`; logging in through the dashboard grants access and persists across a reload; logging out revokes it; the WhatsApp webhook continues to pass Meta's signature check untouched.
 
+**Built 2026-09-13 — two decisions beyond this original spec, made during `/architect`, see `progress-tracker.md` for full detail:** (1) `POST /api/auth/login` is throttled in-memory per IP (5 failed attempts / 15 minutes, not persisted) — the original spec didn't address brute-force protection at all. (2) Logout is an icon button added to the sidebar's existing avatar block, since the spec named a `LoginPage` but never specified where logout itself lives. Session TTL is 7 days. Everything else matches this entry exactly as written.
+
 ---
 
 ---

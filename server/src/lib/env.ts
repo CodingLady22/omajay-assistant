@@ -29,12 +29,24 @@ function isConfigured<T>(schema: z.ZodType<T>): () => boolean {
 }
 
 // Core — every feature depends on these; the server refuses to boot without them.
+// DASHBOARD_PASSWORD/SESSION_SECRET joined this group in feature 26: unlike
+// every other credential here (which gates one optional integration),
+// these two gate every /api/* request once requireAuth is mounted, so a
+// missing value should fail loudly at boot, not surface as a confusing
+// runtime error on the first login attempt.
 const coreEnvSchema = z.object({
   PORT: z.coerce.number().default(3001),
   MONGODB_URI: z.string().min(1),
+  DASHBOARD_PASSWORD: z.string().min(1),
+  SESSION_SECRET: z.string().min(16),
 });
 
 export const env = parseEnv("lib/env", coreEnvSchema);
+
+// The one place allowed to read NODE_ENV directly (lib/env.ts owns all
+// process.env access) — used only to decide the session cookie's `secure`
+// flag (lib/session.ts).
+export const isProduction = process.env.NODE_ENV === "production";
 
 // Per-service / per-integration — validated lazily, the first time the code
 // that needs it actually runs. A feature shouldn't be blocked by credentials

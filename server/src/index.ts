@@ -4,6 +4,8 @@ import { createStandardIndexes } from "@/db/indexes";
 import { registerJobs } from "@/jobs/scheduler";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
+import { requireAuth } from "@/middleware/requireAuth";
+import authRouter from "@/routes/auth";
 import calendarRouter from "@/routes/calendar";
 import chatRouter from "@/routes/chat";
 import contractsRouter from "@/routes/contracts";
@@ -24,6 +26,13 @@ async function bootstrap(): Promise<void> {
   app.get("/health", (_req, res) => {
     res.json({ success: true, data: { status: "ok" } });
   });
+
+  // /api/auth mounts before the gate (login/logout/status must be reachable
+  // while unauthenticated). /api/whatsapp, once feature 05 lands, mounts
+  // here too — it keeps its own Meta signature verification and must stay
+  // exempt from requireAuth as well.
+  app.use("/api/auth", authRouter);
+  app.use("/api", requireAuth);
 
   app.use("/api/chat", chatRouter);
   app.use("/api/trends", trendsRouter);
