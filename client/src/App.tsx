@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
-import { getAuthStatus, logout } from "@/lib/api";
+import { getAuthStatus, logout, setUnauthorizedHandler } from "@/lib/api";
 import { ChatPage } from "@/pages/ChatPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { TrendsPage } from "@/pages/TrendsPage";
@@ -22,6 +22,20 @@ export function App() {
     getAuthStatus().then((result) => {
       setAuthState(result.success && result.data.authenticated ? "authenticated" : "unauthenticated");
     });
+  }, []);
+
+  useEffect(() => {
+    // Any 401 from a gated route (e.g. the session expired past its 7-day
+    // TTL while the tab stayed open) re-checks the real auth state instead
+    // of assuming the single 401 is trustworthy on its own — a transient
+    // server hiccup shouldn't bounce someone still validly logged in.
+    function handleUnauthorized() {
+      getAuthStatus().then((result) => {
+        setAuthState(result.success && result.data.authenticated ? "authenticated" : "unauthenticated");
+      });
+    }
+    setUnauthorizedHandler(handleUnauthorized);
+    return () => setUnauthorizedHandler(null);
   }, []);
 
   async function handleLogout() {

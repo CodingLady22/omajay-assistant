@@ -40,6 +40,9 @@ export function verifySessionToken(token: string | undefined): boolean {
   try {
     const payload: unknown = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8"));
     if (typeof payload !== "object" || payload === null || !("exp" in payload)) return false;
+    // Narrowed to an object with an "exp" key by the check above — TS's `in`
+    // narrowing doesn't carry through on an `unknown`-typed value, so this
+    // just restates what was already verified, not an unchecked assumption.
     const { exp } = payload as { exp: unknown };
     return typeof exp === "number" && exp > Date.now();
   } catch {
@@ -58,7 +61,15 @@ export function getSessionTokenFromRequest(req: Request): string | undefined {
     if (separatorIndex === -1) continue;
     const name = part.slice(0, separatorIndex).trim();
     if (name === SESSION_COOKIE_NAME) {
-      return decodeURIComponent(part.slice(separatorIndex + 1).trim());
+      const rawValue = part.slice(separatorIndex + 1).trim();
+      try {
+        return decodeURIComponent(rawValue);
+      } catch {
+        // Malformed percent-encoding (a corrupted cookie, or a hand-crafted
+        // request) — treat as no session rather than letting decodeURIComponent's
+        // URIError bubble up as an uncaught 500 outside the JSON wrapper.
+        return undefined;
+      }
     }
   }
   return undefined;

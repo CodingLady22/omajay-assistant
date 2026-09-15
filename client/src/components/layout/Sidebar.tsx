@@ -70,7 +70,7 @@ export function Sidebar({ isMobileOpen, onClose, onLogout }: Props) {
           ))}
         </nav>
 
-        <div className="flex items-center gap-2.5 border-t border-border px-4 py-3 sm:justify-center sm:px-2 lg:justify-start lg:px-4">
+        <div className="flex items-center gap-2.5 border-t border-border px-4 py-3 sm:flex-col sm:items-center sm:gap-1.5 sm:px-2 sm:py-3 lg:flex-row lg:justify-start lg:gap-2.5 lg:px-4 lg:py-3">
           <div
             className="flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-full text-[12px] font-semibold text-white"
             style={{ background: "linear-gradient(135deg, var(--color-pink-mid), var(--color-coral))" }}
@@ -85,7 +85,7 @@ export function Sidebar({ isMobileOpen, onClose, onLogout }: Props) {
             type="button"
             onClick={onLogout}
             aria-label="Log out"
-            className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface hover:text-text-primary sm:hidden lg:flex"
+            className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-surface hover:text-text-primary sm:ml-0 lg:ml-auto"
           >
             <LogOut size={14} />
           </button>

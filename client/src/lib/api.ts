@@ -17,12 +17,25 @@ export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
 export type ApiResponse<T> = { success: true; data: T } | { success: false; error: string };
 
+// Set once by App.tsx so an expired/invalid session (any 401 from a gated
+// route) can flip the app back to the login page, instead of every panel
+// just showing its own generic "couldn't load" fallback with no way back.
+// A 401 from /api/auth/login itself (a wrong password) also calls this
+// harmlessly — the app is already showing LoginPage at that point, so
+// re-confirming "unauthenticated" is a no-op, not a behavior change.
+let unauthorizedHandler: (() => void) | null = null;
+
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  unauthorizedHandler = handler;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<ApiResponse<T>> {
   try {
     const res = await fetch(`${API_BASE_URL}${path}`, {
       ...init,
       headers: { "Content-Type": "application/json", ...init?.headers },
     });
+    if (res.status === 401) unauthorizedHandler?.();
     // res.json() returns `any`; the assertion is unavoidable here — every route
     // returns the same { success, data? | error? } wrapper validated by zod server-side.
     return (await res.json()) as ApiResponse<T>;
@@ -133,6 +146,7 @@ export async function uploadDocument(
 
   try {
     const res = await fetch(`${API_BASE_URL}/api/documents/upload`, { method: "POST", body: formData });
+    if (res.status === 401) unauthorizedHandler?.();
     return (await res.json()) as ApiResponse<{ source: string; chunk_count: number }>;
   } catch (error) {
     console.error("[lib/api]", error);
