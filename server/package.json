@@ -4,6 +4,7 @@
   "main": "index.ts",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "typecheck": "tsc -b --noEmit",
     "db:seed": "tsx src/db/run-seed.ts",
     "db:setup-search-index": "tsx src/db/run-setup-search-index.ts",
     "graph:test": "tsx src/agents/run-graph-test.ts",
@@ -21,6 +22,9 @@
   "license": "ISC",
   "description": "",
   "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
   "dependencies": {
     "@langchain/core": "^1.2.1",
     "@langchain/google": "^0.2.1",
